@@ -1,85 +1,67 @@
 """Support for SMS dongle sensor."""
-import logging
-
-import gammu  # pylint: disable=import-error
-
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import DEVICE_CLASS_SIGNAL_STRENGTH, SIGNAL_STRENGTH_DECIBELS
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SMS_GATEWAY
+from .const import (
+    DOMAIN,
+    GATEWAY,
+    NETWORK_COORDINATOR,
+    NETWORK_SENSORS,
+    SIGNAL_COORDINATOR,
+    SIGNAL_SENSORS,
+    SMS_GATEWAY,
+)
 
-_LOGGER = logging.getLogger(__name__)
 
-
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up the GSM Signal Sensor sensor."""
-    gateway = hass.data[DOMAIN][SMS_GATEWAY]
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up all device sensors."""
+    sms_data = hass.data[DOMAIN][SMS_GATEWAY]
+    signal_coordinator = sms_data[SIGNAL_COORDINATOR]
+    network_coordinator = sms_data[NETWORK_COORDINATOR]
+    gateway = sms_data[GATEWAY]
+    unique_id = str(await gateway.get_imei_async())
     entities = []
-    imei = await gateway.get_imei_async()
-    name = f"gsm_signal_imei_{imei}"
-    entities.append(
-        GSMSignalSensor(
-            hass,
-            gateway,
-            name,
+    for description in SIGNAL_SENSORS.values():
+        entities.append(
+            DeviceSensor(
+                signal_coordinator,
+                description,
+                unique_id,
+            )
         )
-    )
+    for description in NETWORK_SENSORS.values():
+        entities.append(
+            DeviceSensor(
+                network_coordinator,
+                description,
+                unique_id,
+            )
+        )
     async_add_entities(entities, True)
 
 
-class GSMSignalSensor(SensorEntity):
-    """Implementation of a GSM Signal sensor."""
+class DeviceSensor(CoordinatorEntity, SensorEntity):
+    """Implementation of a device sensor."""
 
-    def __init__(
-        self,
-        hass,
-        gateway,
-        name,
-    ):
-        """Initialize the GSM Signal sensor."""
-        self._hass = hass
-        self._gateway = gateway
-        self._name = name
-        self._state = None
+    def __init__(self, coordinator, description, unique_id):
+        """Initialize the device sensor."""
+        super().__init__(coordinator)
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, unique_id)},
+            name="SMS Gateway",
+        )
+        self._attr_unique_id = f"{unique_id}_{description.key}"
+        self.entity_description = description
 
     @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit the value is expressed in."""
-        return SIGNAL_STRENGTH_DECIBELS
-
-    @property
-    def device_class(self):
-        """Return the class of this sensor."""
-        return DEVICE_CLASS_SIGNAL_STRENGTH
-
-    @property
-    def available(self):
-        """Return if the sensor data are available."""
-        return self._state is not None
-
-    @property
-    def state(self):
+    def native_value(self):
         """Return the state of the device."""
-        return self._state["SignalStrength"]
-
-    async def async_update(self):
-        """Get the latest data from the modem."""
-        try:
-            self._state = await self._gateway.get_signal_quality_async()
-        except gammu.GSMError as exc:
-            _LOGGER.error("Failed to read signal quality: %s", exc)
-
-    @property
-    def extra_state_attributes(self):
-        """Return the sensor attributes."""
-        return self._state
-
-    @property
-    def entity_registry_enabled_default(self) -> bool:
-        """Return if the entity should be enabled when first added to the entity registry."""
-        return False
+        return self.coordinator.data.get(self.entity_description.key)

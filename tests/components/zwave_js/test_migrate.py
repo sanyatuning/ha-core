@@ -1,4 +1,6 @@
 """Test the Z-Wave JS migration module."""
+import copy
+
 import pytest
 from zwave_js_server.model.node import Node
 
@@ -48,7 +50,7 @@ async def test_unique_id_migration_dupes(
     assert entity_entry.unique_id == old_unique_id_2
 
     # Add a ready node, unique ID should be migrated
-    node = Node(client, multisensor_6_state)
+    node = Node(client, copy.deepcopy(multisensor_6_state))
     event = {"node": node}
 
     client.driver.controller.emit("node added", event)
@@ -91,7 +93,7 @@ async def test_unique_id_migration(hass, multisensor_6_state, client, integratio
     assert entity_entry.unique_id == old_unique_id
 
     # Add a ready node, unique ID should be migrated
-    node = Node(client, multisensor_6_state)
+    node = Node(client, copy.deepcopy(multisensor_6_state))
     event = {"node": node}
 
     client.driver.controller.emit("node added", event)
@@ -135,7 +137,7 @@ async def test_unique_id_migration_property_key(
     assert entity_entry.unique_id == old_unique_id
 
     # Add a ready node, unique ID should be migrated
-    node = Node(client, hank_binary_switch_state)
+    node = Node(client, copy.deepcopy(hank_binary_switch_state))
     event = {"node": node}
 
     client.driver.controller.emit("node added", event)
@@ -170,7 +172,7 @@ async def test_unique_id_migration_notification_binary_sensor(
     assert entity_entry.unique_id == old_unique_id
 
     # Add a ready node, unique ID should be migrated
-    node = Node(client, multisensor_6_state)
+    node = Node(client, copy.deepcopy(multisensor_6_state))
     event = {"node": node}
 
     client.driver.controller.emit("node added", event)
@@ -187,19 +189,24 @@ async def test_old_entity_migration(
     hass, hank_binary_switch_state, client, integration
 ):
     """Test old entity on a different endpoint is migrated to a new one."""
-    node = Node(client, hank_binary_switch_state)
+    node = Node(client, copy.deepcopy(hank_binary_switch_state))
+    driver = client.driver
+    assert driver
 
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     device = dev_reg.async_get_or_create(
-        config_entry_id=integration.entry_id, identifiers={get_device_id(client, node)}
+        config_entry_id=integration.entry_id,
+        identifiers={get_device_id(driver, node)},
+        manufacturer=hank_binary_switch_state["deviceConfig"]["manufacturer"],
+        model=hank_binary_switch_state["deviceConfig"]["label"],
     )
 
     SENSOR_NAME = "sensor.smart_plug_with_two_usb_ports_value_electric_consumed"
     entity_name = SENSOR_NAME.split(".")[1]
 
     # Create entity RegistryEntry using fake endpoint
-    old_unique_id = f"{client.driver.controller.home_id}.32-50-1-value-66049"
+    old_unique_id = f"{driver.controller.home_id}.32-50-1-value-66049"
     entity_entry = ent_reg.async_get_or_create(
         "sensor",
         DOMAIN,
@@ -216,7 +223,7 @@ async def test_old_entity_migration(
     for i in range(0, 2):
         # Add a ready node, unique ID should be migrated
         event = {"node": node}
-        client.driver.controller.emit("node added", event)
+        driver.controller.emit("node added", event)
         await hass.async_block_till_done()
 
         # Check that new RegistryEntry is using new unique ID format
@@ -230,19 +237,24 @@ async def test_different_endpoint_migration_status_sensor(
     hass, hank_binary_switch_state, client, integration
 ):
     """Test that the different endpoint migration logic skips over the status sensor."""
-    node = Node(client, hank_binary_switch_state)
+    node = Node(client, copy.deepcopy(hank_binary_switch_state))
+    driver = client.driver
+    assert driver
 
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     device = dev_reg.async_get_or_create(
-        config_entry_id=integration.entry_id, identifiers={get_device_id(client, node)}
+        config_entry_id=integration.entry_id,
+        identifiers={get_device_id(driver, node)},
+        manufacturer=hank_binary_switch_state["deviceConfig"]["manufacturer"],
+        model=hank_binary_switch_state["deviceConfig"]["label"],
     )
 
     SENSOR_NAME = "sensor.smart_plug_with_two_usb_ports_status_sensor"
     entity_name = SENSOR_NAME.split(".")[1]
 
     # Create entity RegistryEntry using fake endpoint
-    old_unique_id = f"{client.driver.controller.home_id}.32.node_status"
+    old_unique_id = f"{driver.controller.home_id}.32.node_status"
     entity_entry = ent_reg.async_get_or_create(
         "sensor",
         DOMAIN,
@@ -259,7 +271,7 @@ async def test_different_endpoint_migration_status_sensor(
     for i in range(0, 2):
         # Add a ready node, unique ID should be migrated
         event = {"node": node}
-        client.driver.controller.emit("node added", event)
+        driver.controller.emit("node added", event)
         await hass.async_block_till_done()
 
         # Check that the RegistryEntry is using the same unique ID
@@ -271,19 +283,24 @@ async def test_skip_old_entity_migration_for_multiple(
     hass, hank_binary_switch_state, client, integration
 ):
     """Test that multiple entities of the same value but on a different endpoint get skipped."""
-    node = Node(client, hank_binary_switch_state)
+    node = Node(client, copy.deepcopy(hank_binary_switch_state))
+    driver = client.driver
+    assert driver
 
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     device = dev_reg.async_get_or_create(
-        config_entry_id=integration.entry_id, identifiers={get_device_id(client, node)}
+        config_entry_id=integration.entry_id,
+        identifiers={get_device_id(driver, node)},
+        manufacturer=hank_binary_switch_state["deviceConfig"]["manufacturer"],
+        model=hank_binary_switch_state["deviceConfig"]["label"],
     )
 
     SENSOR_NAME = "sensor.smart_plug_with_two_usb_ports_value_electric_consumed"
     entity_name = SENSOR_NAME.split(".")[1]
 
     # Create two entity entrrys using different endpoints
-    old_unique_id_1 = f"{client.driver.controller.home_id}.32-50-1-value-66049"
+    old_unique_id_1 = f"{driver.controller.home_id}.32-50-1-value-66049"
     entity_entry = ent_reg.async_get_or_create(
         "sensor",
         DOMAIN,
@@ -297,7 +314,7 @@ async def test_skip_old_entity_migration_for_multiple(
     assert entity_entry.unique_id == old_unique_id_1
 
     # Create two entity entrrys using different endpoints
-    old_unique_id_2 = f"{client.driver.controller.home_id}.32-50-2-value-66049"
+    old_unique_id_2 = f"{driver.controller.home_id}.32-50-2-value-66049"
     entity_entry = ent_reg.async_get_or_create(
         "sensor",
         DOMAIN,
@@ -311,12 +328,12 @@ async def test_skip_old_entity_migration_for_multiple(
     assert entity_entry.unique_id == old_unique_id_2
     # Add a ready node, unique ID should be migrated
     event = {"node": node}
-    client.driver.controller.emit("node added", event)
+    driver.controller.emit("node added", event)
     await hass.async_block_till_done()
 
     # Check that new RegistryEntry is created using new unique ID format
     entity_entry = ent_reg.async_get(SENSOR_NAME)
-    new_unique_id = f"{client.driver.controller.home_id}.32-50-0-value-66049"
+    new_unique_id = f"{driver.controller.home_id}.32-50-0-value-66049"
     assert entity_entry.unique_id == new_unique_id
 
     # Check that the old entities stuck around because we skipped the migration step
@@ -328,18 +345,25 @@ async def test_old_entity_migration_notification_binary_sensor(
     hass, multisensor_6_state, client, integration
 ):
     """Test old entity on a different endpoint is migrated to a new one for a notification binary sensor."""
-    node = Node(client, multisensor_6_state)
+    node = Node(client, copy.deepcopy(multisensor_6_state))
+    driver = client.driver
+    assert driver
 
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     device = dev_reg.async_get_or_create(
-        config_entry_id=integration.entry_id, identifiers={get_device_id(client, node)}
+        config_entry_id=integration.entry_id,
+        identifiers={get_device_id(driver, node)},
+        manufacturer=multisensor_6_state["deviceConfig"]["manufacturer"],
+        model=multisensor_6_state["deviceConfig"]["label"],
     )
 
     entity_name = NOTIFICATION_MOTION_BINARY_SENSOR.split(".")[1]
 
     # Create entity RegistryEntry using old unique ID format
-    old_unique_id = f"{client.driver.controller.home_id}.52-113-1-Home Security-Motion sensor status.8"
+    old_unique_id = (
+        f"{driver.controller.home_id}.52-113-1-Home Security-Motion sensor status.8"
+    )
     entity_entry = ent_reg.async_get_or_create(
         "binary_sensor",
         DOMAIN,
@@ -356,12 +380,14 @@ async def test_old_entity_migration_notification_binary_sensor(
     for _ in range(0, 2):
         # Add a ready node, unique ID should be migrated
         event = {"node": node}
-        client.driver.controller.emit("node added", event)
+        driver.controller.emit("node added", event)
         await hass.async_block_till_done()
 
         # Check that new RegistryEntry is using new unique ID format
         entity_entry = ent_reg.async_get(NOTIFICATION_MOTION_BINARY_SENSOR)
-        new_unique_id = f"{client.driver.controller.home_id}.52-113-0-Home Security-Motion sensor status.8"
+        new_unique_id = (
+            f"{driver.controller.home_id}.52-113-0-Home Security-Motion sensor status.8"
+        )
         assert entity_entry.unique_id == new_unique_id
         assert (
             ent_reg.async_get_entity_id("binary_sensor", DOMAIN, old_unique_id) is None

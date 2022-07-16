@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import voluptuous as vol
 
-from homeassistant.components.automation import AutomationActionType
+from homeassistant.components.automation import (
+    AutomationActionType,
+    AutomationTriggerInfo,
+)
 from homeassistant.components.device_automation import DEVICE_TRIGGER_BASE_SCHEMA
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -28,9 +31,11 @@ TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
 )
 
 
-async def async_get_triggers(hass: HomeAssistant, device_id: str) -> list[dict]:
+async def async_get_triggers(
+    hass: HomeAssistant, device_id: str
+) -> list[dict[str, str]]:
     """List device triggers for Arcam FMJ Receiver control devices."""
-    registry = await entity_registry.async_get_registry(hass)
+    registry = entity_registry.async_get(hass)
     triggers = []
 
     # Get all the integrations entities for this device
@@ -53,10 +58,10 @@ async def async_attach_trigger(
     hass: HomeAssistant,
     config: ConfigType,
     action: AutomationActionType,
-    automation_info: dict,
+    automation_info: AutomationTriggerInfo,
 ) -> CALLBACK_TYPE:
     """Attach a trigger."""
-    trigger_data = automation_info.get("trigger_data", {}) if automation_info else {}
+    trigger_data = automation_info["trigger_data"]
     job = HassJob(action)
 
     if config[CONF_TYPE] == "turn_on":
@@ -69,7 +74,7 @@ async def async_attach_trigger(
                     job,
                     {
                         "trigger": {
-                            **trigger_data,
+                            **trigger_data,  # type: ignore[arg-type]  # https://github.com/python/mypy/issues/9117
                             **config,
                             "description": f"{DOMAIN} - {entity_id}",
                         }

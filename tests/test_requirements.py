@@ -8,6 +8,7 @@ from homeassistant import loader, setup
 from homeassistant.requirements import (
     CONSTRAINT_FILE,
     RequirementsNotFound,
+    async_clear_install_history,
     async_get_integration_with_requirements,
     async_process_requirements,
 )
@@ -89,7 +90,7 @@ async def test_install_missing_package(hass):
     ) as mock_inst, pytest.raises(RequirementsNotFound):
         await async_process_requirements(hass, "test_component", ["hello==1.0.0"])
 
-    assert len(mock_inst.mock_calls) == 1
+    assert len(mock_inst.mock_calls) == 3
 
 
 async def test_get_integration_with_requirements(hass):
@@ -188,9 +189,13 @@ async def test_get_integration_with_requirements_pip_install_fails_two_passes(ha
         "test-comp==1.0.0",
     ]
 
-    assert len(mock_inst.mock_calls) == 3
+    assert len(mock_inst.mock_calls) == 7
     assert sorted(mock_call[1][0] for mock_call in mock_inst.mock_calls) == [
         "test-comp-after-dep==1.0.0",
+        "test-comp-after-dep==1.0.0",
+        "test-comp-after-dep==1.0.0",
+        "test-comp-dep==1.0.0",
+        "test-comp-dep==1.0.0",
         "test-comp-dep==1.0.0",
         "test-comp==1.0.0",
     ]
@@ -208,18 +213,66 @@ async def test_get_integration_with_requirements_pip_install_fails_two_passes(ha
         assert integration
         assert integration.domain == "test_component"
 
-    assert len(mock_is_installed.mock_calls) == 3
+    assert len(mock_is_installed.mock_calls) == 0
+    # On another attempt we remember failures and don't try again
+    assert len(mock_inst.mock_calls) == 0
+
+    # Now clear the history and so we try again
+    async_clear_install_history(hass)
+
+    with pytest.raises(RequirementsNotFound), patch(
+        "homeassistant.util.package.is_installed", return_value=False
+    ) as mock_is_installed, patch(
+        "homeassistant.util.package.install_package", side_effect=_mock_install_package
+    ) as mock_inst:
+
+        integration = await async_get_integration_with_requirements(
+            hass, "test_component"
+        )
+        assert integration
+        assert integration.domain == "test_component"
+
+    assert len(mock_is_installed.mock_calls) == 2
     assert sorted(mock_call[1][0] for mock_call in mock_is_installed.mock_calls) == [
         "test-comp-after-dep==1.0.0",
         "test-comp-dep==1.0.0",
-        "test-comp==1.0.0",
     ]
 
-    assert len(mock_inst.mock_calls) == 3
+    assert len(mock_inst.mock_calls) == 6
+    assert sorted(mock_call[1][0] for mock_call in mock_inst.mock_calls) == [
+        "test-comp-after-dep==1.0.0",
+        "test-comp-after-dep==1.0.0",
+        "test-comp-after-dep==1.0.0",
+        "test-comp-dep==1.0.0",
+        "test-comp-dep==1.0.0",
+        "test-comp-dep==1.0.0",
+    ]
+
+    # Now clear the history and mock success
+    async_clear_install_history(hass)
+
+    with patch(
+        "homeassistant.util.package.is_installed", return_value=False
+    ) as mock_is_installed, patch(
+        "homeassistant.util.package.install_package", return_value=True
+    ) as mock_inst:
+
+        integration = await async_get_integration_with_requirements(
+            hass, "test_component"
+        )
+        assert integration
+        assert integration.domain == "test_component"
+
+    assert len(mock_is_installed.mock_calls) == 2
+    assert sorted(mock_call[1][0] for mock_call in mock_is_installed.mock_calls) == [
+        "test-comp-after-dep==1.0.0",
+        "test-comp-dep==1.0.0",
+    ]
+
+    assert len(mock_inst.mock_calls) == 2
     assert sorted(mock_call[1][0] for mock_call in mock_inst.mock_calls) == [
         "test-comp-after-dep==1.0.0",
         "test-comp-dep==1.0.0",
-        "test-comp==1.0.0",
     ]
 
 
@@ -344,12 +397,12 @@ async def test_discovery_requirements_mqtt(hass):
         hass, MockModule("mqtt_comp", partial_manifest={"mqtt": ["foo/discovery"]})
     )
     with patch(
-        "homeassistant.requirements.async_process_requirements",
+        "homeassistant.requirements.RequirementsManager.async_process_requirements",
     ) as mock_process:
         await async_get_integration_with_requirements(hass, "mqtt_comp")
 
     assert len(mock_process.mock_calls) == 2  # mqtt also depends on http
-    assert mock_process.mock_calls[0][1][2] == mqtt.requirements
+    assert mock_process.mock_calls[0][1][1] == mqtt.requirements
 
 
 async def test_discovery_requirements_ssdp(hass):
@@ -361,17 +414,17 @@ async def test_discovery_requirements_ssdp(hass):
         hass, MockModule("ssdp_comp", partial_manifest={"ssdp": [{"st": "roku:ecp"}]})
     )
     with patch(
-        "homeassistant.requirements.async_process_requirements",
+        "homeassistant.requirements.RequirementsManager.async_process_requirements",
     ) as mock_process:
         await async_get_integration_with_requirements(hass, "ssdp_comp")
 
     assert len(mock_process.mock_calls) == 4
-    assert mock_process.mock_calls[0][1][2] == ssdp.requirements
+    assert mock_process.mock_calls[0][1][1] == ssdp.requirements
     # Ensure zeroconf is a dep for ssdp
     assert {
-        mock_process.mock_calls[1][1][1],
-        mock_process.mock_calls[2][1][1],
-        mock_process.mock_calls[3][1][1],
+        mock_process.mock_calls[1][1][0],
+        mock_process.mock_calls[2][1][0],
+        mock_process.mock_calls[3][1][0],
     } == {"network", "zeroconf", "http"}
 
 
@@ -390,12 +443,12 @@ async def test_discovery_requirements_zeroconf(hass, partial_manifest):
     )
 
     with patch(
-        "homeassistant.requirements.async_process_requirements",
+        "homeassistant.requirements.RequirementsManager.async_process_requirements",
     ) as mock_process:
         await async_get_integration_with_requirements(hass, "comp")
 
     assert len(mock_process.mock_calls) == 3  # zeroconf also depends on http
-    assert mock_process.mock_calls[0][1][2] == zeroconf.requirements
+    assert mock_process.mock_calls[0][1][1] == zeroconf.requirements
 
 
 async def test_discovery_requirements_dhcp(hass):
@@ -413,9 +466,9 @@ async def test_discovery_requirements_dhcp(hass):
         ),
     )
     with patch(
-        "homeassistant.requirements.async_process_requirements",
+        "homeassistant.requirements.RequirementsManager.async_process_requirements",
     ) as mock_process:
         await async_get_integration_with_requirements(hass, "comp")
 
     assert len(mock_process.mock_calls) == 1  # dhcp does not depend on http
-    assert mock_process.mock_calls[0][1][2] == dhcp.requirements
+    assert mock_process.mock_calls[0][1][1] == dhcp.requirements

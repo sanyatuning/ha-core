@@ -1,10 +1,13 @@
 """Support for Rflink Cover devices."""
+from __future__ import annotations
+
 import logging
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import voluptuous as vol
 
+from homeassistant.core import HomeAssistant
 from homeassistant.components.cover import (
     ATTR_CURRENT_POSITION,
     ATTR_POSITION,
@@ -13,8 +16,10 @@ from homeassistant.components.cover import (
 )
 from homeassistant.const import CONF_DEVICES, CONF_NAME, CONF_TYPE
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from . import (
     CONF_ALIASES,
@@ -123,7 +128,12 @@ def devices_from_config(domain_config):
     return devices
 
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
     """Set up the Rflink cover platform."""
     async_add_entities(devices_from_config(config))
 
@@ -143,12 +153,10 @@ class RflinkCover(RflinkCommand, CoverEntity, RestoreEntity):
         self._opening_time = travelling_time_up
         self._closing_time = travelling_time_down
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """Restore RFLink cover state (OPEN/CLOSE)."""
         await super().async_added_to_hass()
-
-        old_state = await self.async_get_last_state()
-        if old_state is not None:
+        if (old_state := await self.async_get_last_state()) is not None:
             self._attr_current_cover_position = old_state.attributes.get(
                 ATTR_CURRENT_POSITION, 0
             )
@@ -168,19 +176,24 @@ class RflinkCover(RflinkCommand, CoverEntity, RestoreEntity):
             self._stopped()
 
     @property
-    def is_closed(self):
+    def is_closed(self) -> bool | None:
         """Return if the cover is closed."""
         return self._attr_current_cover_position == 0
 
-    async def async_close_cover(self, **kwargs):
+    @property
+    def assumed_state(self) -> bool:
+        """Return True because covers can be stopped midway."""
+        return True
+
+    async def async_close_cover(self, **kwargs: Any) -> None:
         """Turn the device close."""
         await self.async_set_cover_position(position=0)
 
-    async def async_open_cover(self, **kwargs):
+    async def async_open_cover(self, **kwargs: Any) -> None:
         """Turn the device open."""
         await self.async_set_cover_position(position=100)
 
-    async def async_stop_cover(self, **kwargs):
+    async def async_stop_cover(self, **kwargs: Any) -> None:
         """Turn the device stop."""
         self._cancel_job()
         self._calc_new_pos()

@@ -1,54 +1,65 @@
 """Support for Goal Zero Yeti Sensors."""
-from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_ICON, ATTR_NAME, CONF_NAME
+from __future__ import annotations
 
-from . import YetiEntity
-from .const import BINARY_SENSOR_DICT, DATA_KEY_API, DATA_KEY_COORDINATOR, DOMAIN
+from typing import cast
+
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+    BinarySensorEntityDescription,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .const import DOMAIN
+from .entity import GoalZeroEntity
 
 PARALLEL_UPDATES = 0
 
+BINARY_SENSOR_TYPES: tuple[BinarySensorEntityDescription, ...] = (
+    BinarySensorEntityDescription(
+        key="backlight",
+        name="Backlight",
+        icon="mdi:clock-digital",
+    ),
+    BinarySensorEntityDescription(
+        key="app_online",
+        name="App Online",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    BinarySensorEntityDescription(
+        key="isCharging",
+        name="Charging",
+        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+    ),
+    BinarySensorEntityDescription(
+        key="inputDetected",
+        name="Input Detected",
+        device_class=BinarySensorDeviceClass.POWER,
+    ),
+)
 
-async def async_setup_entry(hass, entry, async_add_entities):
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
     """Set up the Goal Zero Yeti sensor."""
-    name = entry.data[CONF_NAME]
-    goalzero_data = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        YetiBinarySensor(
-            goalzero_data[DATA_KEY_API],
-            goalzero_data[DATA_KEY_COORDINATOR],
-            name,
-            sensor_name,
-            entry.entry_id,
+        GoalZeroBinarySensor(
+            hass.data[DOMAIN][entry.entry_id],
+            description,
         )
-        for sensor_name in BINARY_SENSOR_DICT
+        for description in BINARY_SENSOR_TYPES
     )
 
 
-class YetiBinarySensor(YetiEntity, BinarySensorEntity):
+class GoalZeroBinarySensor(GoalZeroEntity, BinarySensorEntity):
     """Representation of a Goal Zero Yeti sensor."""
-
-    def __init__(
-        self,
-        api,
-        coordinator,
-        name,
-        sensor_name,
-        server_unique_id,
-    ):
-        """Initialize a Goal Zero Yeti sensor."""
-        super().__init__(api, coordinator, name, server_unique_id)
-
-        self._condition = sensor_name
-        self._attr_device_class = BINARY_SENSOR_DICT[sensor_name].get(ATTR_DEVICE_CLASS)
-        self._attr_icon = BINARY_SENSOR_DICT[sensor_name].get(ATTR_ICON)
-        self._attr_name = f"{name} {BINARY_SENSOR_DICT[sensor_name].get(ATTR_NAME)}"
-        self._attr_unique_id = (
-            f"{server_unique_id}/{BINARY_SENSOR_DICT[sensor_name].get(ATTR_NAME)}"
-        )
 
     @property
     def is_on(self) -> bool:
-        """Return if the service is on."""
-        if self.api.data:
-            return self.api.data[self._condition] == 1
-        return False
+        """Return True if the service is on."""
+        return cast(bool, self._api.data[self.entity_description.key] == 1)

@@ -1,14 +1,13 @@
 """Lighting channels module for Zigbee Home Automation."""
 from __future__ import annotations
 
-from collections.abc import Coroutine
 from contextlib import suppress
 
 from zigpy.zcl.clusters import lighting
 
 from .. import registries
 from ..const import REPORT_CONFIG_DEFAULT
-from .base import ClientChannel, ZigbeeChannel
+from .base import AttrReportConfig, ClientChannel, ZigbeeChannel
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(lighting.Ballast.cluster_id)
@@ -30,12 +29,19 @@ class ColorChannel(ZigbeeChannel):
     CAPABILITIES_COLOR_TEMP = 0x10
     UNSUPPORTED_ATTRIBUTE = 0x86
     REPORT_CONFIG = (
-        {"attr": "current_x", "config": REPORT_CONFIG_DEFAULT},
-        {"attr": "current_y", "config": REPORT_CONFIG_DEFAULT},
-        {"attr": "color_temperature", "config": REPORT_CONFIG_DEFAULT},
+        AttrReportConfig(attr="current_x", config=REPORT_CONFIG_DEFAULT),
+        AttrReportConfig(attr="current_y", config=REPORT_CONFIG_DEFAULT),
+        AttrReportConfig(attr="color_temperature", config=REPORT_CONFIG_DEFAULT),
     )
     MAX_MIREDS: int = 500
     MIN_MIREDS: int = 153
+    ZCL_INIT_ATTRS = {
+        "color_mode": False,
+        "color_temp_physical_min": True,
+        "color_temp_physical_max": True,
+        "color_capabilities": True,
+        "color_loop_active": False,
+    }
 
     @property
     def color_capabilities(self) -> int:
@@ -45,6 +51,11 @@ class ColorChannel(ZigbeeChannel):
         if self.cluster.get("color_temperature") is not None:
             return self.CAPABILITIES_COLOR_XY | self.CAPABILITIES_COLOR_TEMP
         return self.CAPABILITIES_COLOR_XY
+
+    @property
+    def color_mode(self) -> int | None:
+        """Return cached value of the color_mode attribute."""
+        return self.cluster.get("color_mode")
 
     @property
     def color_loop_active(self) -> int | None:
@@ -75,22 +86,3 @@ class ColorChannel(ZigbeeChannel):
     def max_mireds(self) -> int:
         """Return the warmest color_temp that this channel supports."""
         return self.cluster.get("color_temp_physical_max", self.MAX_MIREDS)
-
-    def async_configure_channel_specific(self) -> Coroutine:
-        """Configure channel."""
-        return self.fetch_color_capabilities(False)
-
-    def async_initialize_channel_specific(self, from_cache: bool) -> Coroutine:
-        """Initialize channel."""
-        return self.fetch_color_capabilities(True)
-
-    async def fetch_color_capabilities(self, from_cache: bool) -> None:
-        """Get the color configuration."""
-        attributes = [
-            "color_temp_physical_min",
-            "color_temp_physical_max",
-            "color_capabilities",
-            "color_temperature",
-        ]
-        # just populates the cache, if not already done
-        await self.get_attributes(attributes, from_cache=from_cache)

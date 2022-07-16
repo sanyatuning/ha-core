@@ -21,6 +21,7 @@ from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import entity_registry
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import get_supported_features
+from homeassistant.helpers.typing import ConfigType, TemplateVarsType
 
 from . import (
     ATTR_POSITION,
@@ -58,9 +59,11 @@ POSITION_ACTION_SCHEMA = cv.DEVICE_ACTION_BASE_SCHEMA.extend(
 ACTION_SCHEMA = vol.Any(CMD_ACTION_SCHEMA, POSITION_ACTION_SCHEMA)
 
 
-async def async_get_actions(hass: HomeAssistant, device_id: str) -> list[dict]:
+async def async_get_actions(
+    hass: HomeAssistant, device_id: str
+) -> list[dict[str, str]]:
     """List device actions for Cover devices."""
-    registry = await entity_registry.async_get_registry(hass)
+    registry = entity_registry.async_get(hass)
     actions = []
 
     # Get all the integrations entities for this device
@@ -98,7 +101,9 @@ async def async_get_actions(hass: HomeAssistant, device_id: str) -> list[dict]:
     return actions
 
 
-async def async_get_action_capabilities(hass: HomeAssistant, config: dict) -> dict:
+async def async_get_action_capabilities(
+    hass: HomeAssistant, config: ConfigType
+) -> dict[str, vol.Schema]:
     """List action capabilities."""
     if config[CONF_TYPE] not in POSITION_ACTION_TYPES:
         return {}
@@ -115,7 +120,10 @@ async def async_get_action_capabilities(hass: HomeAssistant, config: dict) -> di
 
 
 async def async_call_action_from_config(
-    hass: HomeAssistant, config: dict, variables: dict, context: Context | None
+    hass: HomeAssistant,
+    config: ConfigType,
+    variables: TemplateVarsType,
+    context: Context | None,
 ) -> None:
     """Execute a device action."""
     service_data = {ATTR_ENTITY_ID: config[CONF_ENTITY_ID]}

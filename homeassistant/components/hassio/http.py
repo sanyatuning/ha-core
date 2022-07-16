@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from http import HTTPStatus
 import logging
 import os
 import re
@@ -10,23 +11,26 @@ import aiohttp
 from aiohttp import web
 from aiohttp.client import ClientTimeout
 from aiohttp.hdrs import (
+    AUTHORIZATION,
+    CACHE_CONTROL,
     CONTENT_ENCODING,
     CONTENT_LENGTH,
     CONTENT_TYPE,
     TRANSFER_ENCODING,
 )
 from aiohttp.web_exceptions import HTTPBadGateway
+from multidict import istr
 
 from homeassistant.components.http import KEY_AUTHENTICATED, HomeAssistantView
 from homeassistant.components.onboarding import async_is_onboarded
-from homeassistant.const import HTTP_UNAUTHORIZED
 
-from .const import X_HASS_IS_ADMIN, X_HASS_USER_ID, X_HASSIO
+from .const import X_HASS_IS_ADMIN, X_HASS_USER_ID
 
 _LOGGER = logging.getLogger(__name__)
 
 MAX_UPLOAD_SIZE = 1024 * 1024 * 1024
 
+# pylint: disable=implicit-str-concat
 NO_TIMEOUT = re.compile(
     r"^(?:"
     r"|homeassistant/update"
@@ -37,19 +41,17 @@ NO_TIMEOUT = re.compile(
     r"|backups/.+/full"
     r"|backups/.+/partial"
     r"|backups/[^/]+/(?:upload|download)"
-    r"|snapshots/.+/full"
-    r"|snapshots/.+/partial"
-    r"|snapshots/[^/]+/(?:upload|download)"
     r")$"
 )
 
-NO_AUTH_ONBOARDING = re.compile(
-    r"^(?:" r"|supervisor/logs" r"|backups/[^/]+/.+" r"|snapshots/[^/]+/.+" r")$"
-)
+NO_AUTH_ONBOARDING = re.compile(r"^(?:" r"|supervisor/logs" r"|backups/[^/]+/.+" r")$")
 
 NO_AUTH = re.compile(
-    r"^(?:" r"|app/.*" r"|addons/[^/]+/logo" r"|addons/[^/]+/icon" r")$"
+    r"^(?:" r"|app/.*" r"|[store\/]*addons/[^/]+/(logo|dark_logo|icon|dark_icon)" r")$"
 )
+
+NO_STORE = re.compile(r"^(?:" r"|app/entrypoint.js" r")$")
+# pylint: enable=implicit-str-concat
 
 
 class HassIOView(HomeAssistantView):
@@ -70,7 +72,7 @@ class HassIOView(HomeAssistantView):
         """Route data to Hass.io."""
         hass = request.app["hass"]
         if _need_auth(hass, path) and not request[KEY_AUTHENTICATED]:
-            return web.Response(status=HTTP_UNAUTHORIZED)
+            return web.Response(status=HTTPStatus.UNAUTHORIZED)
 
         return await self._command_proxy(path, request)
 
@@ -86,10 +88,10 @@ class HassIOView(HomeAssistantView):
         This method is a coroutine.
         """
         headers = _init_header(request)
-        if path in ("snapshots/new/upload", "backups/new/upload"):
+        if path == "backups/new/upload":
             # We need to reuse the full content type that includes the boundary
             headers[
-                "Content-Type"
+                CONTENT_TYPE
             ] = request._stored_content_type  # pylint: disable=protected-access
 
         try:
@@ -104,7 +106,7 @@ class HassIOView(HomeAssistantView):
 
             # Stream response
             response = web.StreamResponse(
-                status=client.status, headers=_response_header(client)
+                status=client.status, headers=_response_header(client, path)
             )
             response.content_type = client.content_type
 
@@ -123,23 +125,22 @@ class HassIOView(HomeAssistantView):
         raise HTTPBadGateway()
 
 
-def _init_header(request: web.Request) -> dict[str, str]:
+def _init_header(request: web.Request) -> dict[istr, str]:
     """Create initial header."""
     headers = {
-        X_HASSIO: os.environ.get("HASSIO_TOKEN", ""),
+        AUTHORIZATION: f"Bearer {os.environ.get('SUPERVISOR_TOKEN', '')}",
         CONTENT_TYPE: request.content_type,
     }
 
     # Add user data
-    user = request.get("hass_user")
-    if user is not None:
-        headers[X_HASS_USER_ID] = request["hass_user"].id
-        headers[X_HASS_IS_ADMIN] = str(int(request["hass_user"].is_admin))
+    if request.get("hass_user") is not None:
+        headers[istr(X_HASS_USER_ID)] = request["hass_user"].id
+        headers[istr(X_HASS_IS_ADMIN)] = str(int(request["hass_user"].is_admin))
 
     return headers
 
 
-def _response_header(response: aiohttp.ClientResponse) -> dict[str, str]:
+def _response_header(response: aiohttp.ClientResponse, path: str) -> dict[str, str]:
     """Create response header."""
     headers = {}
 
@@ -152,6 +153,9 @@ def _response_header(response: aiohttp.ClientResponse) -> dict[str, str]:
         ):
             continue
         headers[name] = value
+
+    if NO_STORE.match(path):
+        headers[CACHE_CONTROL] = "no-store, max-age=0"
 
     return headers
 

@@ -1,4 +1,6 @@
 """Support for HomematicIP Cloud weather devices."""
+from __future__ import annotations
+
 from homematicip.aio.device import (
     AsyncWeatherSensor,
     AsyncWeatherSensorPlus,
@@ -20,8 +22,9 @@ from homeassistant.components.weather import (
     WeatherEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import TEMP_CELSIUS
+from homeassistant.const import SPEED_KILOMETERS_PER_HOUR, TEMP_CELSIUS
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN as HMIPC_DOMAIN, HomematicipGenericEntity
 from .hap import HomematicipHAP
@@ -46,11 +49,13 @@ HOME_WEATHER_CONDITION = {
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the HomematicIP weather sensor from a config entry."""
     hap = hass.data[HMIPC_DOMAIN][config_entry.unique_id]
-    entities = []
+    entities: list[HomematicipGenericEntity] = []
     for device in hap.home.devices:
         if isinstance(device, AsyncWeatherSensorPro):
             entities.append(HomematicipWeatherSensorPro(hap, device))
@@ -66,6 +71,9 @@ async def async_setup_entry(
 class HomematicipWeatherSensor(HomematicipGenericEntity, WeatherEntity):
     """Representation of the HomematicIP weather sensor plus & basic."""
 
+    _attr_native_temperature_unit = TEMP_CELSIUS
+    _attr_native_wind_speed_unit = SPEED_KILOMETERS_PER_HOUR
+
     def __init__(self, hap: HomematicipHAP, device) -> None:
         """Initialize the weather sensor."""
         super().__init__(hap, device)
@@ -76,14 +84,9 @@ class HomematicipWeatherSensor(HomematicipGenericEntity, WeatherEntity):
         return self._device.label
 
     @property
-    def temperature(self) -> float:
+    def native_temperature(self) -> float:
         """Return the platform temperature."""
         return self._device.actualTemperature
-
-    @property
-    def temperature_unit(self) -> str:
-        """Return the unit of measurement."""
-        return TEMP_CELSIUS
 
     @property
     def humidity(self) -> int:
@@ -91,7 +94,7 @@ class HomematicipWeatherSensor(HomematicipGenericEntity, WeatherEntity):
         return self._device.humidity
 
     @property
-    def wind_speed(self) -> float:
+    def native_wind_speed(self) -> float:
         """Return the wind speed."""
         return self._device.windSpeed
 
@@ -124,6 +127,9 @@ class HomematicipWeatherSensorPro(HomematicipWeatherSensor):
 class HomematicipHomeWeather(HomematicipGenericEntity, WeatherEntity):
     """Representation of the HomematicIP home weather."""
 
+    _attr_native_temperature_unit = TEMP_CELSIUS
+    _attr_native_wind_speed_unit = SPEED_KILOMETERS_PER_HOUR
+
     def __init__(self, hap: HomematicipHAP) -> None:
         """Initialize the home weather."""
         hap.home.modelType = "HmIP-Home-Weather"
@@ -140,14 +146,9 @@ class HomematicipHomeWeather(HomematicipGenericEntity, WeatherEntity):
         return f"Weather {self._home.location.city}"
 
     @property
-    def temperature(self) -> float:
+    def native_temperature(self) -> float:
         """Return the temperature."""
         return self._device.weather.temperature
-
-    @property
-    def temperature_unit(self) -> str:
-        """Return the unit of measurement."""
-        return TEMP_CELSIUS
 
     @property
     def humidity(self) -> int:
@@ -155,7 +156,7 @@ class HomematicipHomeWeather(HomematicipGenericEntity, WeatherEntity):
         return self._device.weather.humidity
 
     @property
-    def wind_speed(self) -> float:
+    def native_wind_speed(self) -> float:
         """Return the wind speed."""
         return round(self._device.weather.windSpeed, 1)
 
@@ -170,6 +171,6 @@ class HomematicipHomeWeather(HomematicipGenericEntity, WeatherEntity):
         return "Powered by Homematic IP"
 
     @property
-    def condition(self) -> str:
+    def condition(self) -> str | None:
         """Return the current condition."""
         return HOME_WEATHER_CONDITION.get(self._device.weather.weatherCondition)

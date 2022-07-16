@@ -20,6 +20,13 @@ DATA_RADIO_TYPE = "deconz"
 DATA_PORT_PATH = "/dev/serial/by-id/FTDI_USB__-__Serial_Cable_12345678-if00-port0"
 
 
+@pytest.fixture(autouse=True)
+def disable_platform_only():
+    """Disable platforms to speed up tests."""
+    with patch("homeassistant.components.zha.PLATFORMS", []):
+        yield
+
+
 @pytest.fixture
 def config_entry_v1(hass):
     """Config entry version 1 fixture."""
@@ -42,7 +49,7 @@ async def test_migration_from_v1_no_baudrate(hass, config_entry_v1, config):
     assert config_entry_v1.data[CONF_DEVICE][CONF_DEVICE_PATH] == DATA_PORT_PATH
     assert CONF_BAUDRATE not in config_entry_v1.data[CONF_DEVICE]
     assert CONF_USB_PATH not in config_entry_v1.data
-    assert config_entry_v1.version == 2
+    assert config_entry_v1.version == 3
 
 
 @patch("homeassistant.components.zha.async_setup_entry", AsyncMock(return_value=True))
@@ -57,7 +64,7 @@ async def test_migration_from_v1_with_baudrate(hass, config_entry_v1):
     assert CONF_USB_PATH not in config_entry_v1.data
     assert CONF_BAUDRATE in config_entry_v1.data[CONF_DEVICE]
     assert config_entry_v1.data[CONF_DEVICE][CONF_BAUDRATE] == 115200
-    assert config_entry_v1.version == 2
+    assert config_entry_v1.version == 3
 
 
 @patch("homeassistant.components.zha.async_setup_entry", AsyncMock(return_value=True))
@@ -71,7 +78,7 @@ async def test_migration_from_v1_wrong_baudrate(hass, config_entry_v1):
     assert config_entry_v1.data[CONF_DEVICE][CONF_DEVICE_PATH] == DATA_PORT_PATH
     assert CONF_USB_PATH not in config_entry_v1.data
     assert CONF_BAUDRATE not in config_entry_v1.data[CONF_DEVICE]
-    assert config_entry_v1.version == 2
+    assert config_entry_v1.version == 3
 
 
 @pytest.mark.skipif(
@@ -89,7 +96,6 @@ async def test_migration_from_v1_wrong_baudrate(hass, config_entry_v1):
 )
 async def test_config_depreciation(hass, zha_config):
     """Test config option depreciation."""
-    await async_setup_component(hass, "persistent_notification", {})
 
     with patch(
         "homeassistant.components.zha.async_setup", return_value=True

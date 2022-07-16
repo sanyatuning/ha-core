@@ -19,7 +19,7 @@ OAUTH2_TOKEN = VENDOR.token_endpoint
 
 
 async def test_full_flow(
-    hass, aiohttp_client, aioclient_mock, current_request_with_host
+    hass, hass_client_no_auth, aioclient_mock, current_request_with_host
 ):
     """Check full flow."""
     assert await setup.async_setup_component(
@@ -27,7 +27,6 @@ async def test_full_flow(
         "neato",
         {
             "neato": {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
-            "http": {"base_url": "https://example.com"},
         },
     )
 
@@ -50,7 +49,7 @@ async def test_full_flow(
         "&scope=public_profile+control_robots+maps"
     )
 
-    client = await aiohttp_client(hass.http.app)
+    client = await hass_client_no_auth()
     resp = await client.get(f"/auth/external/callback?code=abcd&state={state}")
     assert resp.status == 200
     assert resp.headers["content-type"] == "text/html; charset=utf-8"
@@ -91,7 +90,7 @@ async def test_abort_if_already_setup(hass: HomeAssistant):
 
 
 async def test_reauth(
-    hass: HomeAssistant, aiohttp_client, aioclient_mock, current_request_with_host
+    hass: HomeAssistant, hass_client_no_auth, aioclient_mock, current_request_with_host
 ):
     """Test initialization of the reauth flow."""
     assert await setup.async_setup_component(
@@ -99,7 +98,6 @@ async def test_reauth(
         "neato",
         {
             "neato": {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
-            "http": {"base_url": "https://example.com"},
         },
     )
 
@@ -127,7 +125,7 @@ async def test_reauth(
         },
     )
 
-    client = await aiohttp_client(hass.http.app)
+    client = await hass_client_no_auth()
     resp = await client.get(f"/auth/external/callback?code=abcd&state={state}")
     assert resp.status == 200
 

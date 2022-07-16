@@ -6,10 +6,11 @@
             "docker": "Docker",
             "hassio": "Supervisor",
             "installation_type": "Tipo de instalaci\u00f3n",
-            "os_name": "Nombre del Sistema Operativo",
+            "os_name": "Familia del sistema operativo",
             "os_version": "Versi\u00f3n del Sistema Operativo",
             "python_version": "Versi\u00f3n de Python",
             "timezone": "Zona horaria",
+            "user": "Usuario",
             "version": "Versi\u00f3n",
             "virtualenv": "Entorno virtual"
         }

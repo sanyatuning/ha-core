@@ -3,13 +3,9 @@ import logging
 
 from pyhap.const import CATEGORY_ALARM_SYSTEM
 
-from homeassistant.components.alarm_control_panel import DOMAIN
-from homeassistant.components.alarm_control_panel.const import (
-    SUPPORT_ALARM_ARM_AWAY,
-    SUPPORT_ALARM_ARM_HOME,
-    SUPPORT_ALARM_ARM_NIGHT,
-    SUPPORT_ALARM_ARM_VACATION,
-    SUPPORT_ALARM_TRIGGER,
+from homeassistant.components.alarm_control_panel import (
+    DOMAIN,
+    AlarmControlPanelEntityFeature,
 )
 from homeassistant.const import (
     ATTR_CODE,
@@ -91,11 +87,11 @@ class SecuritySystem(HomeAccessory):
         supported_states = state.attributes.get(
             ATTR_SUPPORTED_FEATURES,
             (
-                SUPPORT_ALARM_ARM_HOME
-                | SUPPORT_ALARM_ARM_VACATION
-                | SUPPORT_ALARM_ARM_AWAY
-                | SUPPORT_ALARM_ARM_NIGHT
-                | SUPPORT_ALARM_TRIGGER
+                AlarmControlPanelEntityFeature.ARM_HOME
+                | AlarmControlPanelEntityFeature.ARM_VACATION
+                | AlarmControlPanelEntityFeature.ARM_AWAY
+                | AlarmControlPanelEntityFeature.ARM_NIGHT
+                | AlarmControlPanelEntityFeature.TRIGGER
             ),
         )
 
@@ -108,15 +104,18 @@ class SecuritySystem(HomeAccessory):
         current_supported_states = [HK_ALARM_DISARMED, HK_ALARM_TRIGGERED]
         target_supported_services = [HK_ALARM_DISARMED]
 
-        if supported_states & SUPPORT_ALARM_ARM_HOME:
+        if supported_states & AlarmControlPanelEntityFeature.ARM_HOME:
             current_supported_states.append(HK_ALARM_STAY_ARMED)
             target_supported_services.append(HK_ALARM_STAY_ARMED)
 
-        if supported_states & (SUPPORT_ALARM_ARM_AWAY | SUPPORT_ALARM_ARM_VACATION):
+        if supported_states & (
+            AlarmControlPanelEntityFeature.ARM_AWAY
+            | AlarmControlPanelEntityFeature.ARM_VACATION
+        ):
             current_supported_states.append(HK_ALARM_AWAY_ARMED)
             target_supported_services.append(HK_ALARM_AWAY_ARMED)
 
-        if supported_states & SUPPORT_ALARM_ARM_NIGHT:
+        if supported_states & AlarmControlPanelEntityFeature.ARM_NIGHT:
             current_supported_states.append(HK_ALARM_NIGHT_ARMED)
             target_supported_services.append(HK_ALARM_NIGHT_ARMED)
 
@@ -158,15 +157,12 @@ class SecuritySystem(HomeAccessory):
         """Update security state after state changed."""
         hass_state = new_state.state
         if (current_state := HASS_TO_HOMEKIT_CURRENT.get(hass_state)) is not None:
-            if self.char_current_state.value != current_state:
-                self.char_current_state.set_value(current_state)
-                _LOGGER.debug(
-                    "%s: Updated current state to %s (%d)",
-                    self.entity_id,
-                    hass_state,
-                    current_state,
-                )
-
+            self.char_current_state.set_value(current_state)
+            _LOGGER.debug(
+                "%s: Updated current state to %s (%d)",
+                self.entity_id,
+                hass_state,
+                current_state,
+            )
         if (target_state := HASS_TO_HOMEKIT_TARGET.get(hass_state)) is not None:
-            if self.char_target_state.value != target_state:
-                self.char_target_state.set_value(target_state)
+            self.char_target_state.set_value(target_state)
