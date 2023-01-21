@@ -93,7 +93,9 @@ async def test_state_value(hass: HomeAssistant) -> None:
                     "command_on": f"echo 1 > {path}",
                     "command_off": f"echo 0 > {path}",
                     "value_template": '{{ value=="1" }}',
-                    "icon_template": '{% if value=="1" %} mdi:on {% else %} mdi:off {% endif %}',
+                    "icon_template": (
+                        '{% if value=="1" %} mdi:on {% else %} mdi:off {% endif %}'
+                    ),
                 }
             },
         )
@@ -142,7 +144,10 @@ async def test_state_json_value(hass: HomeAssistant) -> None:
                     "command_on": f"echo '{oncmd}' > {path}",
                     "command_off": f"echo '{offcmd}' > {path}",
                     "value_template": '{{ value_json.status=="ok" }}',
-                    "icon_template": '{% if value_json.status=="ok" %} mdi:on {% else %} mdi:off {% endif %}',
+                    "icon_template": (
+                        '{% if value_json.status=="ok" %} mdi:on'
+                        "{% else %} mdi:off {% endif %}"
+                    ),
                 }
             },
         )
@@ -419,3 +424,16 @@ async def test_unique_id(hass: HomeAssistant) -> None:
         ent_reg.async_get_entity_id("switch", "command_line", "not-so-unique-anymore")
         is not None
     )
+
+
+async def test_command_failure(caplog: LogCaptureFixture, hass: HomeAssistant) -> None:
+    """Test command failure."""
+
+    await setup_test_entity(
+        hass,
+        {"test": {"command_off": "exit 33"}},
+    )
+    await hass.services.async_call(
+        DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: "switch.test"}, blocking=True
+    )
+    assert "return code 33" in caplog.text

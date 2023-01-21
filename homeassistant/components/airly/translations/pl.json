@@ -1,7 +1,8 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Lokalizacja jest ju\u017c skonfigurowana"
+            "already_configured": "Lokalizacja jest ju\u017c skonfigurowana",
+            "wrong_location": "Brak stacji pomiarowych Airly w tym rejonie"
         },
         "error": {
             "invalid_api_key": "Nieprawid\u0142owy klucz API",
@@ -21,7 +22,7 @@
     },
     "system_health": {
         "info": {
-            "can_reach_server": "Dost\u0119p do serwera Airly",
+            "can_reach_server": "Dost\u0119p do serwera",
             "requests_per_day": "Dozwolone dzienne \u017c\u0105dania",
             "requests_remaining": "Pozosta\u0142o dozwolonych \u017c\u0105da\u0144"
         }

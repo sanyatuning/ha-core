@@ -9,7 +9,7 @@ import pytest
 
 from homeassistant.components import zone
 import homeassistant.components.device_tracker as device_tracker
-from homeassistant.components.device_tracker import const, legacy
+from homeassistant.components.device_tracker import SourceType, const, legacy
 from homeassistant.const import (
     ATTR_ENTITY_PICTURE,
     ATTR_FRIENDLY_NAME,
@@ -75,7 +75,7 @@ async def test_reading_broken_yaml_config(hass):
         "badkey.yaml": "@:\n  name: Device",
         "noname.yaml": "my_device:\n",
         "allok.yaml": "My Device:\n  name: Device",
-        "oneok.yaml": ("My Device!:\n  name: Device\nbad_device:\n  nme: Device"),
+        "oneok.yaml": "My Device!:\n  name: Device\nbad_device:\n  nme: Device",
     }
     args = {"hass": hass, "consider_home": timedelta(seconds=60)}
     with patch_yaml_files(files):
@@ -162,7 +162,7 @@ async def test_duplicate_mac_dev_id(mock_warning, hass):
     assert "Duplicate device IDs" in args[0], "Duplicate device IDs warning expected"
 
 
-async def test_setup_without_yaml_file(hass, enable_custom_integrations):
+async def test_setup_without_yaml_file(hass, yaml_devices, enable_custom_integrations):
     """Test with no YAML file."""
     with assert_setup_component(1, device_tracker.DOMAIN):
         assert await async_setup_component(hass, device_tracker.DOMAIN, TEST_PLATFORM)
@@ -495,7 +495,7 @@ async def test_see_passive_zone_state(
     assert attrs.get("latitude") == 1
     assert attrs.get("longitude") == 2
     assert attrs.get("gps_accuracy") == 0
-    assert attrs.get("source_type") == device_tracker.SOURCE_TYPE_ROUTER
+    assert attrs.get("source_type") == SourceType.ROUTER
 
     scanner.leave_home("dev1")
 
@@ -515,7 +515,7 @@ async def test_see_passive_zone_state(
     assert attrs.get("latitude") is None
     assert attrs.get("longitude") is None
     assert attrs.get("gps_accuracy") is None
-    assert attrs.get("source_type") == device_tracker.SOURCE_TYPE_ROUTER
+    assert attrs.get("source_type") == SourceType.ROUTER
 
 
 @patch("homeassistant.components.device_tracker.const.LOGGER.warning")

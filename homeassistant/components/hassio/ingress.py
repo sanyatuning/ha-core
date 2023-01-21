@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from ipaddress import ip_address
 import logging
 import os
@@ -73,6 +74,7 @@ class HassIOIngress(HomeAssistantView):
         self, request: web.Request, token: str, path: str
     ) -> web.WebSocketResponse:
         """Ingress route for websocket."""
+        req_protocols: Iterable[str]
         if hdrs.SEC_WEBSOCKET_PROTOCOL in request.headers:
             req_protocols = [
                 str(proto.strip())
@@ -128,6 +130,7 @@ class HassIOIngress(HomeAssistantView):
             allow_redirects=False,
             data=request.content,
             timeout=ClientTimeout(total=None),
+            skip_auto_headers={hdrs.CONTENT_TYPE},
         ) as result:
             headers = _response_header(result)
 
@@ -190,6 +193,7 @@ def _init_header(request: web.Request, token: str) -> CIMultiDict | dict[str, st
 
     # Set X-Forwarded-For
     forward_for = request.headers.get(hdrs.X_FORWARDED_FOR)
+    assert request.transport
     if (peername := request.transport.get_extra_info("peername")) is None:
         _LOGGER.error("Can't set forward_for header, missing peername")
         raise HTTPBadRequest()

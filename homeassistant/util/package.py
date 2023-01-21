@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import cache
 from importlib.metadata import PackageNotFoundError, version
 import logging
 import os
@@ -23,6 +24,7 @@ def is_virtual_env() -> bool:
     )
 
 
+@cache
 def is_docker_env() -> bool:
     """Return True if we run in a docker env."""
     return Path("/.dockerenv").exists()
@@ -50,7 +52,9 @@ def is_installed(package: str) -> bool:
         # was aborted while in progress see
         # https://github.com/home-assistant/core/issues/47699
         if installed_version is None:
-            _LOGGER.error("Installed version for %s resolved to None", req.project_name)  # type: ignore[unreachable]
+            _LOGGER.error(  # type: ignore[unreachable]
+                "Installed version for %s resolved to None", req.project_name
+            )
             return False
         return installed_version in req
     except PackageNotFoundError:
