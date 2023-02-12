@@ -1522,7 +1522,10 @@ async def test_media_player_speaker(hass):
     )
     assert call.data["is_volume_muted"]
 
-    call, _, = await assert_request_calls_service(
+    (
+        call,
+        _,
+    ) = await assert_request_calls_service(
         "Alexa.Speaker",
         "SetMute",
         "media_player#test_speaker",
@@ -1571,7 +1574,10 @@ async def test_media_player_step_speaker(hass):
     )
     assert call.data["is_volume_muted"]
 
-    call, _, = await assert_request_calls_service(
+    (
+        call,
+        _,
+    ) = await assert_request_calls_service(
         "Alexa.StepSpeaker",
         "SetMute",
         "media_player#test_step_speaker",
@@ -3344,10 +3350,11 @@ async def test_cover_semantics_position_and_tilt(hass):
     } in tilt_state_mappings
 
 
-async def test_input_number(hass):
-    """Test input_number discovery."""
+@pytest.mark.parametrize("domain", ["input_number", "number"])
+async def test_input_number(hass, domain: str):
+    """Test input_number and number discovery."""
     device = (
-        "input_number.test_slider",
+        f"{domain}.test_slider",
         30,
         {
             "initial": 30,
@@ -3360,7 +3367,7 @@ async def test_input_number(hass):
     )
     appliance = await discovery_test(device, hass)
 
-    assert appliance["endpointId"] == "input_number#test_slider"
+    assert appliance["endpointId"] == f"{domain}#test_slider"
     assert appliance["displayCategories"][0] == "OTHER"
     assert appliance["friendlyName"] == "Test Slider"
 
@@ -3369,7 +3376,7 @@ async def test_input_number(hass):
     )
 
     range_capability = get_capability(
-        capabilities, "Alexa.RangeController", "input_number.value"
+        capabilities, "Alexa.RangeController", f"{domain}.value"
     )
 
     capability_resources = range_capability["capabilityResources"]
@@ -3409,11 +3416,11 @@ async def test_input_number(hass):
     call, _ = await assert_request_calls_service(
         "Alexa.RangeController",
         "SetRangeValue",
-        "input_number#test_slider",
-        "input_number.set_value",
+        f"{domain}#test_slider",
+        f"{domain}.set_value",
         hass,
         payload={"rangeValue": 10},
-        instance="input_number.value",
+        instance=f"{domain}.value",
     )
     assert call.data["value"] == 10
 
@@ -3422,17 +3429,18 @@ async def test_input_number(hass):
         [(25, -5, False), (35, 5, False), (-20, -100, False), (35, 100, False)],
         "Alexa.RangeController",
         "AdjustRangeValue",
-        "input_number#test_slider",
-        "input_number.set_value",
+        f"{domain}#test_slider",
+        f"{domain}.set_value",
         "value",
-        instance="input_number.value",
+        instance=f"{domain}.value",
     )
 
 
-async def test_input_number_float(hass):
-    """Test input_number discovery."""
+@pytest.mark.parametrize("domain", ["input_number", "number"])
+async def test_input_number_float(hass, domain: str):
+    """Test input_number and number discovery."""
     device = (
-        "input_number.test_slider_float",
+        f"{domain}.test_slider_float",
         0.5,
         {
             "initial": 0.5,
@@ -3445,7 +3453,7 @@ async def test_input_number_float(hass):
     )
     appliance = await discovery_test(device, hass)
 
-    assert appliance["endpointId"] == "input_number#test_slider_float"
+    assert appliance["endpointId"] == f"{domain}#test_slider_float"
     assert appliance["displayCategories"][0] == "OTHER"
     assert appliance["friendlyName"] == "Test Slider Float"
 
@@ -3454,7 +3462,7 @@ async def test_input_number_float(hass):
     )
 
     range_capability = get_capability(
-        capabilities, "Alexa.RangeController", "input_number.value"
+        capabilities, "Alexa.RangeController", f"{domain}.value"
     )
 
     capability_resources = range_capability["capabilityResources"]
@@ -3494,11 +3502,11 @@ async def test_input_number_float(hass):
     call, _ = await assert_request_calls_service(
         "Alexa.RangeController",
         "SetRangeValue",
-        "input_number#test_slider_float",
-        "input_number.set_value",
+        f"{domain}#test_slider_float",
+        f"{domain}.set_value",
         hass,
         payload={"rangeValue": 0.333},
-        instance="input_number.value",
+        instance=f"{domain}.value",
     )
     assert call.data["value"] == 0.333
 
@@ -3513,10 +3521,10 @@ async def test_input_number_float(hass):
         ],
         "Alexa.RangeController",
         "AdjustRangeValue",
-        "input_number#test_slider_float",
-        "input_number.set_value",
+        f"{domain}#test_slider_float",
+        f"{domain}.set_value",
         "value",
-        instance="input_number.value",
+        instance=f"{domain}.value",
     )
 
 

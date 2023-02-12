@@ -1,7 +1,7 @@
 """The tests the History component."""
 from __future__ import annotations
 
-# pylint: disable=protected-access,invalid-name
+# pylint: disable=invalid-name
 from copy import copy
 from datetime import datetime, timedelta
 import json
@@ -324,7 +324,7 @@ def test_get_last_state_changes(hass_recorder):
 
     start = dt_util.utcnow() - timedelta(minutes=2)
     point = start + timedelta(minutes=1)
-    point2 = point + timedelta(minutes=1)
+    point2 = point + timedelta(minutes=1, seconds=1)
 
     with patch(
         "homeassistant.components.recorder.core.dt_util.utcnow", return_value=start
