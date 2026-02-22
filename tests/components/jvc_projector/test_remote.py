@@ -21,13 +21,14 @@ ENTITY_ID = "remote.jvc_projector"
 
 async def test_entity_state(
     hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
     mock_device: MagicMock,
     mock_integration: MockConfigEntry,
 ) -> None:
     """Tests entity state is registered."""
     entity = hass.states.get(ENTITY_ID)
     assert entity
-    assert er.async_get(hass).async_get(entity.entity_id)
+    assert entity_registry.async_get(entity.entity_id)
 
 
 async def test_commands(
@@ -42,7 +43,7 @@ async def test_commands(
         {ATTR_ENTITY_ID: ENTITY_ID},
         blocking=True,
     )
-    assert mock_device.power_on.call_count == 1
+    assert mock_device.get.call_count == 3
 
     await hass.services.async_call(
         REMOTE_DOMAIN,
@@ -50,7 +51,7 @@ async def test_commands(
         {ATTR_ENTITY_ID: ENTITY_ID},
         blocking=True,
     )
-    assert mock_device.power_off.call_count == 1
+    assert mock_device.get.call_count == 4
 
     await hass.services.async_call(
         REMOTE_DOMAIN,
@@ -59,6 +60,30 @@ async def test_commands(
         blocking=True,
     )
     assert mock_device.remote.call_count == 1
+
+    await hass.services.async_call(
+        REMOTE_DOMAIN,
+        SERVICE_SEND_COMMAND,
+        {ATTR_ENTITY_ID: ENTITY_ID, ATTR_COMMAND: ["hdmi1"]},
+        blocking=True,
+    )
+    assert mock_device.remote.call_count == 2
+
+    await hass.services.async_call(
+        REMOTE_DOMAIN,
+        SERVICE_SEND_COMMAND,
+        {ATTR_ENTITY_ID: ENTITY_ID, ATTR_COMMAND: ["anamo"]},
+        blocking=True,
+    )
+    assert mock_device.remote.call_count == 3
+
+    await hass.services.async_call(
+        REMOTE_DOMAIN,
+        SERVICE_SEND_COMMAND,
+        {ATTR_ENTITY_ID: ENTITY_ID, ATTR_COMMAND: ["picture_mode"]},
+        blocking=True,
+    )
+    assert mock_device.remote.call_count == 4
 
 
 async def test_unknown_command(

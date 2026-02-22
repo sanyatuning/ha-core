@@ -4,20 +4,19 @@ Test setup of RFLink covers component/platform. State tracking and
 control of RFLink cover devices.
 
 """
+
 import asyncio
 
-from homeassistant.components.cover import ATTR_CURRENT_POSITION, ATTR_POSITION
-from homeassistant.components.rflink import EVENT_BUTTON_PRESSED
-from homeassistant.const import (
-    ATTR_ENTITY_ID,
-    SERVICE_CLOSE_COVER,
-    SERVICE_OPEN_COVER,
+import pytest
+
+from homeassistant.components.cover import (
+    ATTR_CURRENT_POSITION,
+    ATTR_POSITION,
     SERVICE_SET_COVER_POSITION,
-    STATE_CLOSED,
-    STATE_CLOSING,
-    STATE_OPEN,
-    STATE_OPENING,
+    CoverState,
 )
+from homeassistant.components.rflink.entity import EVENT_BUTTON_PRESSED
+from homeassistant.const import ATTR_ENTITY_ID, SERVICE_CLOSE_COVER, SERVICE_OPEN_COVER
 from homeassistant.core import CoreState, HomeAssistant, State, callback
 
 from .test_init import mock_rflink
@@ -67,7 +66,9 @@ async def assert_state(hass, name, expected_state, position=None):
         assert state.attributes["current_position"] == position
 
 
-async def test_default_setup(hass: HomeAssistant, monkeypatch) -> None:
+async def test_default_setup(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test all basic functionality of the RFLink cover component."""
     # setup mocking rflink module
     event_callback, create, protocol, _ = await mock_rflink(
@@ -79,7 +80,7 @@ async def test_default_setup(hass: HomeAssistant, monkeypatch) -> None:
 
     # test default state of cover loaded from config
     cover_initial = hass.states.get(f"{DOMAIN}.test")
-    assert cover_initial.state == STATE_CLOSED
+    assert cover_initial.state == CoverState.CLOSED
     assert cover_initial.attributes["assumed_state"]
 
     # cover should follow state of the hardware device by interpreting
@@ -87,38 +88,38 @@ async def test_default_setup(hass: HomeAssistant, monkeypatch) -> None:
 
     # mock incoming command event for this device
     event_callback({"id": "protocol_0_0", "command": "up"})
-    await assert_state(hass, "test", STATE_OPENING, 100)
+    await assert_state(hass, "test", CoverState.OPENING, 100)
 
     # mock incoming command event for this device
     event_callback({"id": "protocol_0_0", "command": "down"})
-    await assert_state(hass, "test", STATE_CLOSING, 0)
+    await assert_state(hass, "test", CoverState.CLOSING, 0)
     await async_sleep(hass, TRAVELLING_TIME / 2)
-    await assert_state(hass, "test", STATE_CLOSING, 0)
+    await assert_state(hass, "test", CoverState.CLOSING, 0)
 
     # mock incoming command event for this device
     event_callback({"id": "protocol_0_0", "command": "stop"})
-    await assert_state(hass, "test", STATE_OPEN, [30, 70])
+    await assert_state(hass, "test", CoverState.OPEN, [30, 70])
 
     # should respond to group command
     event_callback({"id": "protocol_0_0", "command": "allon"})
-    await assert_state(hass, "test", STATE_OPENING, 100)
+    await assert_state(hass, "test", CoverState.OPENING, 100)
 
     # should respond to group command
     event_callback({"id": "protocol_0_0", "command": "alloff"})
-    await assert_state(hass, "test", STATE_CLOSING, 0)
+    await assert_state(hass, "test", CoverState.CLOSING, 0)
 
     # test following aliases
     # mock incoming command event for this device alias
     event_callback({"id": "test_alias_0_0", "command": "up"})
-    await assert_state(hass, "test", STATE_OPENING, 100)
+    await assert_state(hass, "test", CoverState.OPENING, 100)
     await async_sleep(hass, TRAVELLING_TIME)
-    await assert_state(hass, "test", STATE_OPEN, 100)
+    await assert_state(hass, "test", CoverState.OPEN, 100)
 
     # test service calls propagates to RFLink
     await hass.services.async_call(
         DOMAIN, SERVICE_CLOSE_COVER, {ATTR_ENTITY_ID: f"{DOMAIN}.test"}
     )
-    await assert_state(hass, "test", STATE_CLOSING, 0)
+    await assert_state(hass, "test", CoverState.CLOSING, 0)
     assert protocol.send_command_ack.call_args_list[0][0][0] == "protocol_0_0"
     assert protocol.send_command_ack.call_args_list[0][0][1] == "DOWN"
 
@@ -126,7 +127,7 @@ async def test_default_setup(hass: HomeAssistant, monkeypatch) -> None:
         DOMAIN, SERVICE_OPEN_COVER, {ATTR_ENTITY_ID: f"{DOMAIN}.test"}
     )
     await async_sleep(hass, TRAVELLING_TIME)
-    await assert_state(hass, "test", STATE_OPEN, 100)
+    await assert_state(hass, "test", CoverState.OPEN, 100)
     assert protocol.send_command_ack.call_args_list[1][0][1] == "UP"
 
     # test set position auto stop
@@ -136,10 +137,12 @@ async def test_default_setup(hass: HomeAssistant, monkeypatch) -> None:
         {ATTR_ENTITY_ID: f"{DOMAIN}.test", ATTR_POSITION: 75},
     )
     await asyncio.sleep(TRAVELLING_TIME / 2)
-    await assert_state(hass, "test", STATE_OPEN, 75)
+    await assert_state(hass, "test", CoverState.OPEN, 75)
 
 
-async def test_firing_bus_event(hass: HomeAssistant, monkeypatch) -> None:
+async def test_firing_bus_event(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Incoming RFLink command events should be put on the HA event bus."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -174,7 +177,9 @@ async def test_firing_bus_event(hass: HomeAssistant, monkeypatch) -> None:
     assert calls[0].data == {"state": "down", "entity_id": f"{DOMAIN}.test"}
 
 
-async def test_signal_repetitions(hass: HomeAssistant, monkeypatch) -> None:
+async def test_signal_repetitions(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Command should be sent amount of configured repetitions."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -212,7 +217,9 @@ async def test_signal_repetitions(hass: HomeAssistant, monkeypatch) -> None:
     assert protocol.send_command_ack.call_count == 5
 
 
-async def test_signal_repetitions_alternation(hass: HomeAssistant, monkeypatch) -> None:
+async def test_signal_repetitions_alternation(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Simultaneously switching entities must alternate repetitions."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -243,7 +250,9 @@ async def test_signal_repetitions_alternation(hass: HomeAssistant, monkeypatch) 
     assert protocol.send_command_ack.call_args_list[3][0][0] == "protocol_0_1"
 
 
-async def test_signal_repetitions_cancelling(hass: HomeAssistant, monkeypatch) -> None:
+async def test_signal_repetitions_cancelling(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Cancel outstanding repetitions when state changed."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -272,7 +281,9 @@ async def test_signal_repetitions_cancelling(hass: HomeAssistant, monkeypatch) -
     assert protocol.send_command_ack.call_args_list[3][0][1] == "UP"
 
 
-async def test_group_alias(hass: HomeAssistant, monkeypatch) -> None:
+async def test_group_alias(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Group aliases should only respond to group commands (allon/alloff)."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -287,22 +298,24 @@ async def test_group_alias(hass: HomeAssistant, monkeypatch) -> None:
     # setup mocking rflink module
     event_callback, _, _, _ = await mock_rflink(hass, config, DOMAIN, monkeypatch)
 
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.CLOSED
 
     # test sending group command to group alias
     event_callback({"id": "test_group_0_0", "command": "allon"})
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.OPEN
 
     # test sending group command to group alias
     event_callback({"id": "test_group_0_0", "command": "down"})
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.OPEN
 
 
-async def test_nogroup_alias(hass: HomeAssistant, monkeypatch) -> None:
+async def test_nogroup_alias(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Non group aliases should not respond to group commands."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -320,22 +333,24 @@ async def test_nogroup_alias(hass: HomeAssistant, monkeypatch) -> None:
     # setup mocking rflink module
     event_callback, _, _, _ = await mock_rflink(hass, config, DOMAIN, monkeypatch)
 
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.CLOSED
 
     # test sending group command to nogroup alias
     event_callback({"id": "test_nogroup_0_0", "command": "allon"})
     await hass.async_block_till_done()
     # should not affect state
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.CLOSED
 
     # test sending group command to nogroup alias
     event_callback({"id": "test_nogroup_0_0", "command": "up"})
     await hass.async_block_till_done()
     # should affect state
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.OPEN
 
 
-async def test_nogroup_device_id(hass: HomeAssistant, monkeypatch) -> None:
+async def test_nogroup_device_id(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Device id that do not respond to group commands (allon/alloff)."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -348,22 +363,24 @@ async def test_nogroup_device_id(hass: HomeAssistant, monkeypatch) -> None:
     # setup mocking rflink module
     event_callback, _, _, _ = await mock_rflink(hass, config, DOMAIN, monkeypatch)
 
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.CLOSED
 
     # test sending group command to nogroup
     event_callback({"id": "test_nogroup_0_0", "command": "allon"})
     await hass.async_block_till_done()
     # should not affect state
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.CLOSED
 
     # test sending group command to nogroup
     event_callback({"id": "test_nogroup_0_0", "command": "up"})
     await hass.async_block_till_done()
     # should affect state
-    assert hass.states.get(f"{DOMAIN}.test").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.test").state == CoverState.OPEN
 
 
-async def test_restore_state(hass: HomeAssistant, monkeypatch) -> None:
+async def test_restore_state(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Ensure states are restored on startup."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -381,39 +398,41 @@ async def test_restore_state(hass: HomeAssistant, monkeypatch) -> None:
     mock_restore_cache(
         hass,
         (
-            State(f"{DOMAIN}.c1", STATE_OPEN, {ATTR_CURRENT_POSITION: 100}),
-            State(f"{DOMAIN}.c2", STATE_CLOSED, {ATTR_CURRENT_POSITION: 0}),
+            State(f"{DOMAIN}.c1", CoverState.OPEN, {ATTR_CURRENT_POSITION: 100}),
+            State(f"{DOMAIN}.c2", CoverState.CLOSED, {ATTR_CURRENT_POSITION: 0}),
         ),
     )
 
-    hass.state = CoreState.starting
+    hass.set_state(CoreState.starting)
 
     # setup mocking rflink module
     _, _, _, _ = await mock_rflink(hass, config, DOMAIN, monkeypatch)
 
     state = hass.states.get(f"{DOMAIN}.c1")
     assert state
-    assert state.state == STATE_OPEN
+    assert state.state == CoverState.OPEN
 
     state = hass.states.get(f"{DOMAIN}.c2")
     assert state
-    assert state.state == STATE_CLOSED
+    assert state.state == CoverState.CLOSED
 
     state = hass.states.get(f"{DOMAIN}.c3")
     assert state
-    assert state.state == STATE_CLOSED
+    assert state.state == CoverState.CLOSED
 
     # not cached cover must default values
     state = hass.states.get(f"{DOMAIN}.c4")
     assert state
-    assert state.state == STATE_CLOSED
+    assert state.state == CoverState.CLOSED
     assert state.attributes["assumed_state"]
 
 
 # The code checks the ID, it will use the
 # 'inverted' class when the name starts with
 # 'newkaku'
-async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
+async def test_inverted_cover(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Ensure states are restored on startup."""
     config = {
         "rflink": {"port": "/dev/ttyABC0"},
@@ -449,7 +468,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     # test default state of cover loaded from config
     standard_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_standard")
-    assert standard_cover.state == STATE_CLOSED
+    assert standard_cover.state == CoverState.CLOSED
     assert standard_cover.attributes["assumed_state"]
 
     # mock incoming up command event for nonkaku_device_1
@@ -457,7 +476,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     standard_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_standard")
-    assert standard_cover.state == STATE_OPEN
+    assert standard_cover.state == CoverState.OPEN
     assert standard_cover.attributes.get("assumed_state")
 
     # mock incoming up command event for nonkaku_device_2
@@ -465,7 +484,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     standard_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_none")
-    assert standard_cover.state == STATE_OPEN
+    assert standard_cover.state == CoverState.OPEN
     assert standard_cover.attributes.get("assumed_state")
 
     # mock incoming up command event for nonkaku_device_3
@@ -474,7 +493,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_inverted")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming up command event for newkaku_device_4
@@ -483,7 +502,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_standard")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming up command event for newkaku_device_5
@@ -492,7 +511,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_none")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming up command event for newkaku_device_6
@@ -501,7 +520,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_inverted")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming down command event for nonkaku_device_1
@@ -510,7 +529,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     standard_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_standard")
-    assert standard_cover.state == STATE_CLOSED
+    assert standard_cover.state == CoverState.CLOSED
     assert standard_cover.attributes.get("assumed_state")
 
     # mock incoming down command event for nonkaku_device_2
@@ -519,7 +538,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     standard_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_none")
-    assert standard_cover.state == STATE_CLOSED
+    assert standard_cover.state == CoverState.CLOSED
     assert standard_cover.attributes.get("assumed_state")
 
     # mock incoming down command event for nonkaku_device_3
@@ -528,7 +547,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_inverted")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming down command event for newkaku_device_4
@@ -537,7 +556,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_standard")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming down command event for newkaku_device_5
@@ -546,7 +565,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_none")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
     assert inverted_cover.attributes.get("assumed_state")
 
     # mock incoming down command event for newkaku_device_6
@@ -555,7 +574,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_inverted")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
     assert inverted_cover.attributes.get("assumed_state")
 
     # We are only testing the 'inverted' devices, the 'standard' devices
@@ -567,7 +586,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_inverted")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
 
     # should respond to group command
     event_callback({"id": "nonkaku_device_3", "command": "allon"})
@@ -575,7 +594,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.nonkaku_type_inverted")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
 
     # should respond to group command
     event_callback({"id": "newkaku_device_4", "command": "alloff"})
@@ -583,7 +602,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_standard")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
 
     # should respond to group command
     event_callback({"id": "newkaku_device_4", "command": "allon"})
@@ -591,7 +610,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_standard")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
 
     # should respond to group command
     event_callback({"id": "newkaku_device_5", "command": "alloff"})
@@ -599,7 +618,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_none")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
 
     # should respond to group command
     event_callback({"id": "newkaku_device_5", "command": "allon"})
@@ -607,7 +626,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_none")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
 
     # should respond to group command
     event_callback({"id": "newkaku_device_6", "command": "alloff"})
@@ -615,7 +634,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_inverted")
-    assert inverted_cover.state == STATE_CLOSED
+    assert inverted_cover.state == CoverState.CLOSED
 
     # should respond to group command
     event_callback({"id": "newkaku_device_6", "command": "allon"})
@@ -623,7 +642,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
     await hass.async_block_till_done()
 
     inverted_cover = hass.states.get(f"{DOMAIN}.newkaku_type_inverted")
-    assert inverted_cover.state == STATE_OPEN
+    assert inverted_cover.state == CoverState.OPEN
 
     # Sending the close command from HA should result
     # in an 'DOWN' command sent to a non-newkaku device
@@ -636,7 +655,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.nonkaku_type_standard").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.nonkaku_type_standard").state == CoverState.CLOSED
     assert protocol.send_command_ack.call_args_list[0][0][0] == "nonkaku_device_1"
     assert protocol.send_command_ack.call_args_list[0][0][1] == "DOWN"
 
@@ -651,7 +670,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.nonkaku_type_standard").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.nonkaku_type_standard").state == CoverState.OPEN
     assert protocol.send_command_ack.call_args_list[1][0][0] == "nonkaku_device_1"
     assert protocol.send_command_ack.call_args_list[1][0][1] == "UP"
 
@@ -664,7 +683,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.nonkaku_type_none").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.nonkaku_type_none").state == CoverState.CLOSED
     assert protocol.send_command_ack.call_args_list[2][0][0] == "nonkaku_device_2"
     assert protocol.send_command_ack.call_args_list[2][0][1] == "DOWN"
 
@@ -677,7 +696,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.nonkaku_type_none").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.nonkaku_type_none").state == CoverState.OPEN
     assert protocol.send_command_ack.call_args_list[3][0][0] == "nonkaku_device_2"
     assert protocol.send_command_ack.call_args_list[3][0][1] == "UP"
 
@@ -692,7 +711,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.nonkaku_type_inverted").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.nonkaku_type_inverted").state == CoverState.CLOSED
     assert protocol.send_command_ack.call_args_list[4][0][0] == "nonkaku_device_3"
     assert protocol.send_command_ack.call_args_list[4][0][1] == "UP"
 
@@ -707,7 +726,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.nonkaku_type_inverted").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.nonkaku_type_inverted").state == CoverState.OPEN
     assert protocol.send_command_ack.call_args_list[5][0][0] == "nonkaku_device_3"
     assert protocol.send_command_ack.call_args_list[5][0][1] == "DOWN"
 
@@ -722,7 +741,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.newkaku_type_standard").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.newkaku_type_standard").state == CoverState.CLOSED
     assert protocol.send_command_ack.call_args_list[6][0][0] == "newkaku_device_4"
     assert protocol.send_command_ack.call_args_list[6][0][1] == "DOWN"
 
@@ -737,7 +756,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.newkaku_type_standard").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.newkaku_type_standard").state == CoverState.OPEN
     assert protocol.send_command_ack.call_args_list[7][0][0] == "newkaku_device_4"
     assert protocol.send_command_ack.call_args_list[7][0][1] == "UP"
 
@@ -750,7 +769,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.newkaku_type_none").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.newkaku_type_none").state == CoverState.CLOSED
     assert protocol.send_command_ack.call_args_list[8][0][0] == "newkaku_device_5"
     assert protocol.send_command_ack.call_args_list[8][0][1] == "UP"
 
@@ -763,7 +782,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.newkaku_type_none").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.newkaku_type_none").state == CoverState.OPEN
     assert protocol.send_command_ack.call_args_list[9][0][0] == "newkaku_device_5"
     assert protocol.send_command_ack.call_args_list[9][0][1] == "DOWN"
 
@@ -778,7 +797,7 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.newkaku_type_inverted").state == STATE_CLOSED
+    assert hass.states.get(f"{DOMAIN}.newkaku_type_inverted").state == CoverState.CLOSED
     assert protocol.send_command_ack.call_args_list[10][0][0] == "newkaku_device_6"
     assert protocol.send_command_ack.call_args_list[10][0][1] == "UP"
 
@@ -793,6 +812,6 @@ async def test_inverted_cover(hass: HomeAssistant, monkeypatch) -> None:
 
     await hass.async_block_till_done()
 
-    assert hass.states.get(f"{DOMAIN}.newkaku_type_inverted").state == STATE_OPEN
+    assert hass.states.get(f"{DOMAIN}.newkaku_type_inverted").state == CoverState.OPEN
     assert protocol.send_command_ack.call_args_list[11][0][0] == "newkaku_device_6"
     assert protocol.send_command_ack.call_args_list[11][0][1] == "DOWN"

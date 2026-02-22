@@ -1,34 +1,26 @@
 """Test Roborock Sensors."""
 
-from roborock.const import (
-    FILTER_REPLACE_TIME,
-    MAIN_BRUSH_REPLACE_TIME,
-    SENSOR_DIRTY_REPLACE_TIME,
-    SIDE_BRUSH_REPLACE_TIME,
-)
+import pytest
+from syrupy.assertion import SnapshotAssertion
 
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
-from tests.common import MockConfigEntry
+from tests.common import MockConfigEntry, snapshot_platform
 
 
-async def test_sensors(hass: HomeAssistant, setup_entry: MockConfigEntry) -> None:
+@pytest.fixture
+def platforms() -> list[Platform]:
+    """Fixture to set platforms used in the test."""
+    return [Platform.SENSOR]
+
+
+async def test_sensors(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    setup_entry: MockConfigEntry,
+    snapshot: SnapshotAssertion,
+) -> None:
     """Test sensors and check test values are correctly set."""
-    assert len(hass.states.async_all("sensor")) == 7
-    assert hass.states.get("sensor.roborock_s7_maxv_main_brush_time_left").state == str(
-        MAIN_BRUSH_REPLACE_TIME - 74382
-    )
-    assert hass.states.get("sensor.roborock_s7_maxv_side_brush_time_left").state == str(
-        SIDE_BRUSH_REPLACE_TIME - 74382
-    )
-    assert hass.states.get("sensor.roborock_s7_maxv_filter_time_left").state == str(
-        FILTER_REPLACE_TIME - 74382
-    )
-    assert hass.states.get("sensor.roborock_s7_maxv_sensor_time_left").state == str(
-        SENSOR_DIRTY_REPLACE_TIME - 74382
-    )
-    assert hass.states.get("sensor.roborock_s7_maxv_cleaning_time").state == "1176"
-    assert (
-        hass.states.get("sensor.roborock_s7_maxv_total_cleaning_time").state == "74382"
-    )
-    assert hass.states.get("sensor.roborock_s7_maxv_status").state == "charging"
+    await snapshot_platform(hass, entity_registry, snapshot, setup_entry.entry_id)

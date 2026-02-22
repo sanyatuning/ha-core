@@ -24,13 +24,13 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from . import ElectraSmartConfigEntry
 from .const import (
     API_DELAY,
     CONSECUTIVE_FAILURE_THRESHOLD,
@@ -89,10 +89,12 @@ PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: ElectraSmartConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Add Electra AC devices."""
-    api: ElectraAPI = hass.data[DOMAIN][entry.entry_id]
+    api = entry.runtime_data
 
     _LOGGER.debug("Discovered %i Electra devices", len(api.devices))
     async_add_entities(
@@ -109,15 +111,20 @@ class ElectraClimateEntity(ClimateEntity):
     _attr_min_temp = MIN_TEMP
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = ELECTRA_MODES
+    _attr_has_entity_name = True
+    _attr_name = None
 
     def __init__(self, device: ElectraAirConditioner, api: ElectraAPI) -> None:
         """Initialize Electra climate entity."""
         self._api = api
         self._electra_ac_device = device
-        self._attr_name = device.name
         self._attr_unique_id = device.mac
         self._attr_supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.FAN_MODE
+            | ClimateEntityFeature.PRESET_MODE
+            | ClimateEntityFeature.TURN_OFF
+            | ClimateEntityFeature.TURN_ON
         )
 
         swing_modes: list = []
@@ -140,7 +147,7 @@ class ElectraClimateEntity(ClimateEntity):
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._electra_ac_device.mac)},
-            name=self.name,
+            name=device.name,
             model=self._electra_ac_device.model,
             manufacturer=self._electra_ac_device.manufactor,
         )
@@ -197,7 +204,7 @@ class ElectraClimateEntity(ClimateEntity):
                 return
 
             if not self._was_available:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "%s (%s) is now available",
                     self._electra_ac_device.mac,
                     self.name,
@@ -250,7 +257,7 @@ class ElectraClimateEntity(ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             raise ValueError("No target temperature provided")
 
-        self._electra_ac_device.set_temperature(temperature)
+        self._electra_ac_device.set_temperature(int(temperature))
         await self._async_operate_electra_ac()
 
     def _update_device_attrs(self) -> None:

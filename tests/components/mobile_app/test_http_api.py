@@ -1,19 +1,26 @@
 """Tests for the mobile_app HTTP API."""
+
 from binascii import unhexlify
 from http import HTTPStatus
 import json
 from unittest.mock import patch
 
+from nacl.encoding import Base64Encoder
+from nacl.secret import SecretBox
 import pytest
 
-from homeassistant.components.mobile_app.const import CONF_SECRET, DOMAIN
+from homeassistant.components.mobile_app.const import (
+    CONF_CLOUDHOOK_URL,
+    CONF_SECRET,
+    DOMAIN,
+)
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 
 from .const import REGISTER, REGISTER_CLEARTEXT, RENDER_TEMPLATE
 
-from tests.common import MockUser, mock_coro
+from tests.common import MockUser
 from tests.typing import ClientSessionGenerator
 
 
@@ -28,7 +35,6 @@ async def test_registration(
     with patch(
         "homeassistant.components.person.async_add_user_device_tracker",
         spec=True,
-        return_value=mock_coro(),
     ) as add_user_dev_track:
         resp = await api_client.post(
             "/api/mobile_app/registrations", json=REGISTER_CLEARTEXT
@@ -66,13 +72,6 @@ async def test_registration_encryption(
     hass: HomeAssistant, hass_client: ClientSessionGenerator
 ) -> None:
     """Test that registrations happen."""
-    try:
-        from nacl.encoding import Base64Encoder
-        from nacl.secret import SecretBox
-    except (ImportError, OSError):
-        pytest.skip("libnacl/libsodium is not installed")
-        return
-
     await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
 
     api_client = await hass_client()
@@ -107,17 +106,65 @@ async def test_registration_encryption(
     assert json.loads(decrypted_data) == {"one": "Hello world"}
 
 
+@pytest.mark.parametrize(
+    "cloud_is_connected",
+    [
+        True,
+        False,
+    ],
+)
+async def test_registration_with_cloud(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    hass_admin_user: MockUser,
+    cloud_is_connected: bool,
+) -> None:
+    """Test that cloudhook_url is only returned when cloud is connected."""
+    await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
+
+    api_client = await hass_client()
+
+    cloudhook_url = "https://hooks.nabu.casa/test123"
+
+    with (
+        patch(
+            "homeassistant.components.mobile_app.http_api.cloud.async_active_subscription",
+            return_value=True,
+        ),
+        patch(
+            "homeassistant.components.mobile_app.http_api.cloud.async_is_connected",
+            return_value=cloud_is_connected,
+        ),
+        patch(
+            "homeassistant.components.mobile_app.http_api.async_create_cloud_hook",
+            return_value=cloudhook_url,
+        ),
+        patch(
+            "homeassistant.components.mobile_app.http_api.cloud.async_remote_ui_url",
+            return_value="https://remote.ui",
+        ),
+        patch(
+            "homeassistant.components.person.async_add_user_device_tracker",
+            spec=True,
+        ),
+    ):
+        resp = await api_client.post(
+            "/api/mobile_app/registrations", json=REGISTER_CLEARTEXT
+        )
+
+    assert resp.status == HTTPStatus.CREATED
+    register_json = await resp.json()
+    assert CONF_WEBHOOK_ID in register_json
+
+    assert register_json.get(CONF_CLOUDHOOK_URL) == (
+        cloudhook_url if cloud_is_connected else None
+    )
+
+
 async def test_registration_encryption_legacy(
     hass: HomeAssistant, hass_client: ClientSessionGenerator
 ) -> None:
     """Test that registrations happen."""
-    try:
-        from nacl.encoding import Base64Encoder
-        from nacl.secret import SecretBox
-    except (ImportError, OSError):
-        pytest.skip("libnacl/libsodium is not installed")
-        return
-
     await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
 
     api_client = await hass_client()

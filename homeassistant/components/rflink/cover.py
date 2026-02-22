@@ -1,27 +1,29 @@
 """Support for Rflink Cover devices."""
+
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 import time
-from typing import Any, Callable, Optional
+from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant
 from homeassistant.components.cover import (
     ATTR_CURRENT_POSITION,
     ATTR_POSITION,
-    PLATFORM_SCHEMA,
+    PLATFORM_SCHEMA as COVER_PLATFORM_SCHEMA,
     CoverEntity,
 )
 from homeassistant.const import CONF_DEVICES, CONF_NAME, CONF_TYPE
-import homeassistant.helpers.config_validation as cv
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import (
+from .const import (
     CONF_ALIASES,
     CONF_DEVICE_DEFAULTS,
     CONF_FIRE_EVENT,
@@ -33,8 +35,8 @@ from . import (
     CONF_TRAVELLING_TIME_UP,
     DEFAULT_TRAVEL_TIME,
     DEVICE_DEFAULTS_SCHEMA,
-    RflinkCommand,
 )
+from .entity import RflinkCommand
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +45,7 @@ PARALLEL_UPDATES = 0
 TYPE_STANDARD = "standard"
 TYPE_INVERTED = "inverted"
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = COVER_PLATFORM_SCHEMA.extend(
     {
         vol.Optional(
             CONF_DEVICE_DEFAULTS, default=DEVICE_DEFAULTS_SCHEMA({})
@@ -143,9 +145,9 @@ class RflinkCover(RflinkCommand, CoverEntity, RestoreEntity):
 
     _attr_current_cover_position = 0
     _attr_assumed_state = True
-    _cancel: Optional[Callable] = None
-    _last_cover_position = None
-    _motion_start_time = None
+    _cancel: Callable | None = None
+    _last_cover_position: int | None = None
+    _motion_start_time: float | None = None
 
     def __init__(self, device_id, travelling_time_up, travelling_time_down, **kwargs):
         """Handle cover specific args and super init."""
@@ -200,13 +202,13 @@ class RflinkCover(RflinkCommand, CoverEntity, RestoreEntity):
         await self._async_handle_command("stop_cover")
         self._stopped()
 
-    async def async_set_cover_position(self, **kwargs):
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move the cover to a specific position."""
         if ATTR_POSITION in kwargs:
             new_position = kwargs[ATTR_POSITION]
             current_position = self.current_cover_position
 
-            _LOGGER.info("set_pos %s -> %s", current_position, new_position)
+            _LOGGER.debug("Set_pos %s -> %s", current_position, new_position)
             if new_position < current_position or new_position == 0:
                 self._start_motion(new_position, False)
                 await self._async_handle_command("close_cover")
@@ -245,7 +247,7 @@ class RflinkCover(RflinkCommand, CoverEntity, RestoreEntity):
 
     def _cancel_job(self):
         if self._cancel:
-            _LOGGER.info("cancel delayed job")
+            _LOGGER.debug("Cancel delayed job")
             self._cancel()
             self._cancel = None
 

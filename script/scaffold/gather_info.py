@@ -1,4 +1,5 @@
 """Gather info for scaffolding."""
+
 import json
 
 from homeassistant.util import slugify
@@ -23,7 +24,12 @@ def gather_info(arguments) -> Info:
         info = _gather_info(
             {
                 "domain": {
-                    "prompt": "What is the domain?",
+                    "prompt": (
+                        """What is the domain?
+
+Hint: The domain is a short name consisting of characters and underscores.
+This domain has to be unique, cannot be changed, and has to match the directory name of the integration."""
+                    ),
                     "validators": [
                         CHECK_EMPTY,
                         [
@@ -71,13 +77,8 @@ def gather_new_integration(determine_auth: bool) -> Info:
         },
         "codeowner": {
             "prompt": "What is your GitHub handle?",
-            "validators": [
-                CHECK_EMPTY,
-                [
-                    'GitHub handles need to start with an "@"',
-                    lambda value: value.startswith("@"),
-                ],
-            ],
+            "validators": [CHECK_EMPTY],
+            "converter": lambda value: value if value.startswith("@") else f"@{value}",
         },
         "requirement": {
             "prompt": "What PyPI package and version do you depend on? Leave blank for none.",
@@ -92,7 +93,7 @@ def gather_new_integration(determine_auth: bool) -> Info:
             "prompt": (
                 f"""How will your integration gather data?
 
-Valid values are {', '.join(SUPPORTED_IOT_CLASSES)}
+Valid values are {", ".join(SUPPORTED_IOT_CLASSES)}
 
 More info @ https://developers.home-assistant.io/docs/creating_integration_manifest#iot-class
 """
@@ -162,8 +163,8 @@ def _gather_info(fields) -> dict:
                 if "default" in info:
                     msg += f" [{info['default']}]"
                 value = input(f"{msg}\n> ")
-            except (KeyboardInterrupt, EOFError):
-                raise ExitApp("Interrupted!", 1)
+            except (KeyboardInterrupt, EOFError) as err:
+                raise ExitApp("Interrupted!", 1) from err
 
             value = value.strip()
 

@@ -1,4 +1,5 @@
 """Support for HomeMatic switches."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -34,7 +35,7 @@ class HMSwitch(HMDevice, SwitchEntity):
     """Representation of a HomeMatic switch."""
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool:
         """Return True if switch is on."""
         try:
             return self._hm_get_state() > 0
@@ -42,7 +43,7 @@ class HMSwitch(HMDevice, SwitchEntity):
             return False
 
     @property
-    def today_energy_kwh(self):
+    def today_energy_kwh(self) -> float | None:
         """Return the current power usage in kWh."""
         if "ENERGY_COUNTER" in self._data:
             try:
@@ -60,7 +61,7 @@ class HMSwitch(HMDevice, SwitchEntity):
         """Turn the switch off."""
         self._hmdevice.off(self._channel)
 
-    def _init_data_struct(self):
+    def _init_data_struct(self) -> None:
         """Generate the data dictionary (self._data) from metadata."""
         self._state = "STATE"
         self._data.update({self._state: None})

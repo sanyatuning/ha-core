@@ -1,8 +1,9 @@
 """API for nVent RAYCHEM SENZ bound to Home Assistant OAuth."""
+
 from typing import cast
 
-from aiosenz import AbstractSENZAuth
 from httpx import AsyncClient
+from pysenz import AbstractSENZAuth
 
 from homeassistant.helpers import config_entry_oauth2_flow
 

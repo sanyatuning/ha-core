@@ -1,4 +1,5 @@
 """Notify platform tests for mobile_app."""
+
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -9,13 +10,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.setup import async_setup_component
 
-from tests.common import MockConfigEntry
+from tests.common import MockConfigEntry, MockUser
 from tests.test_util.aiohttp import AiohttpClientMocker
 from tests.typing import WebSocketGenerator
 
 
 @pytest.fixture
-async def setup_push_receiver(hass, aioclient_mock, hass_admin_user):
+async def setup_push_receiver(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, hass_admin_user: MockUser
+) -> None:
     """Fixture that sets up a mocked push receiver."""
     push_url = "https://mobile-push.home-assistant.dev/push"
 
@@ -107,7 +110,9 @@ async def setup_push_receiver(hass, aioclient_mock, hass_admin_user):
 
 
 @pytest.fixture
-async def setup_websocket_channel_only_push(hass, hass_admin_user):
+async def setup_websocket_channel_only_push(
+    hass: HomeAssistant, hass_admin_user: MockUser
+) -> None:
     """Set up local push."""
     entry = MockConfigEntry(
         data={
@@ -143,8 +148,16 @@ async def test_notify_works(
 ) -> None:
     """Test notify works."""
     assert hass.services.has_service("notify", "mobile_app_test") is True
-    assert await hass.services.async_call(
-        "notify", "mobile_app_test", {"message": "Hello world"}, blocking=True
+    await hass.services.async_call(
+        "notify",
+        "mobile_app_test",
+        {
+            "message": "Hello world",
+            "title": "Demo",
+            "target": ["mock-webhook_id"],
+            "data": {"field1": "value1"},
+        },
+        blocking=True,
     )
 
     assert len(aioclient_mock.mock_calls) == 1
@@ -154,6 +167,8 @@ async def test_notify_works(
 
     assert call_json["push_token"] == "PUSH_TOKEN"
     assert call_json["message"] == "Hello world"
+    assert call_json["title"] == "Demo"
+    assert call_json["data"] == {"field1": "value1"}
     assert call_json["registration_info"]["app_id"] == "io.homeassistant.mobile_app"
     assert call_json["registration_info"]["app_version"] == "1.0"
     assert call_json["registration_info"]["webhook_id"] == "mock-webhook_id"
@@ -191,7 +206,7 @@ async def test_notify_ws_works(
     sub_result = await client.receive_json()
     assert sub_result["success"]
 
-    assert await hass.services.async_call(
+    await hass.services.async_call(
         "notify", "mobile_app_test", {"message": "Hello world"}, blocking=True
     )
 
@@ -212,7 +227,7 @@ async def test_notify_ws_works(
     sub_result = await client.receive_json()
     assert sub_result["success"]
 
-    assert await hass.services.async_call(
+    await hass.services.async_call(
         "notify", "mobile_app_test", {"message": "Hello world 2"}, blocking=True
     )
 
@@ -271,7 +286,7 @@ async def test_notify_ws_confirming_works(
     assert sub_result["success"]
 
     # Sent a message that will be delivered locally
-    assert await hass.services.async_call(
+    await hass.services.async_call(
         "notify", "mobile_app_test", {"message": "Hello world"}, blocking=True
     )
 
@@ -359,23 +374,24 @@ async def test_notify_ws_not_confirming(
     sub_result = await client.receive_json()
     assert sub_result["success"]
 
-    assert await hass.services.async_call(
+    await hass.services.async_call(
         "notify", "mobile_app_test", {"message": "Hello world 1"}, blocking=True
     )
 
     with patch(
         "homeassistant.components.mobile_app.push_notification.PUSH_CONFIRM_TIMEOUT", 0
     ):
-        assert await hass.services.async_call(
+        await hass.services.async_call(
             "notify", "mobile_app_test", {"message": "Hello world 2"}, blocking=True
         )
+        await hass.async_block_till_done()
         await hass.async_block_till_done()
 
     # When we fail, all unconfirmed ones and failed one are sent via cloud
     assert len(aioclient_mock.mock_calls) == 2
 
     # All future ones also go via cloud
-    assert await hass.services.async_call(
+    await hass.services.async_call(
         "notify", "mobile_app_test", {"message": "Hello world 3"}, blocking=True
     )
 
@@ -389,7 +405,7 @@ async def test_local_push_only(
 ) -> None:
     """Test a local only push registration."""
     with pytest.raises(HomeAssistantError) as e_info:
-        assert await hass.services.async_call(
+        await hass.services.async_call(
             "notify",
             "mobile_app_websocket_push_name",
             {"message": "Not connected"},
@@ -411,7 +427,7 @@ async def test_local_push_only(
     sub_result = await client.receive_json()
     assert sub_result["success"]
 
-    assert await hass.services.async_call(
+    await hass.services.async_call(
         "notify",
         "mobile_app_websocket_push_name",
         {"message": "Hello world 1"},

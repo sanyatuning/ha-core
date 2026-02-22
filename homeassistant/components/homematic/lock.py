@@ -1,4 +1,5 @@
 """Support for Homematic locks."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -22,11 +23,7 @@ def setup_platform(
     if discovery_info is None:
         return
 
-    devices = []
-    for conf in discovery_info[ATTR_DISCOVER_DEVICES]:
-        devices.append(HMLock(conf))
-
-    add_entities(devices, True)
+    add_entities((HMLock(conf) for conf in discovery_info[ATTR_DISCOVER_DEVICES]), True)
 
 
 class HMLock(HMDevice, LockEntity):
@@ -51,7 +48,7 @@ class HMLock(HMDevice, LockEntity):
         """Open the door latch."""
         self._hmdevice.open()
 
-    def _init_data_struct(self):
+    def _init_data_struct(self) -> None:
         """Generate the data dictionary (self._data) from metadata."""
         self._state = "STATE"
         self._data.update({self._state: None})

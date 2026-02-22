@@ -1,8 +1,10 @@
 """Support for Ness D8X/D16X devices."""
-from collections import namedtuple
-import datetime
 
-from nessclient import ArmingState, Client
+import datetime
+import logging
+from typing import NamedTuple
+
+from nessclient import ArmingMode, ArmingState, Client
 import voluptuous as vol
 
 from homeassistant.components.binary_sensor import (
@@ -21,10 +23,14 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util.hass_dict import HassKey
+
+_LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "ness_alarm"
-DATA_NESS = "ness_alarm"
+DATA_NESS: HassKey[Client] = HassKey(DOMAIN)
 
 CONF_DEVICE_PORT = "port"
 CONF_INFER_ARMING_STATE = "infer_arming_state"
@@ -39,7 +45,13 @@ DEFAULT_INFER_ARMING_STATE = False
 SIGNAL_ZONE_CHANGED = "ness_alarm.zone_changed"
 SIGNAL_ARMING_STATE_CHANGED = "ness_alarm.arming_state_changed"
 
-ZoneChangedData = namedtuple("ZoneChangedData", ["zone_id", "state"])
+
+class ZoneChangedData(NamedTuple):
+    """Data for a zone state change."""
+
+    zone_id: int
+    state: bool
+
 
 DEFAULT_ZONE_TYPE = BinarySensorDeviceClass.MOTION
 ZONE_SCHEMA = vol.Schema(
@@ -109,6 +121,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _close)
 
+    async def _started(event):
+        # Force update for current arming status and current zone states (once Home Assistant has finished loading required sensors and panel)
+        _LOGGER.debug("invoking client keepalive() & update()")
+        hass.loop.create_task(client.keepalive())
+        hass.loop.create_task(client.update())
+
+    async_at_started(hass, _started)
+
     hass.async_create_task(
         async_load_platform(
             hass, Platform.BINARY_SENSOR, DOMAIN, {CONF_ZONES: zones}, config
@@ -124,16 +144,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             hass, SIGNAL_ZONE_CHANGED, ZoneChangedData(zone_id=zone_id, state=state)
         )
 
-    def on_state_change(arming_state: ArmingState):
+    def on_state_change(arming_state: ArmingState, arming_mode: ArmingMode | None):
         """Receives and propagates arming state updates."""
-        async_dispatcher_send(hass, SIGNAL_ARMING_STATE_CHANGED, arming_state)
+        async_dispatcher_send(
+            hass, SIGNAL_ARMING_STATE_CHANGED, arming_state, arming_mode
+        )
 
     client.on_zone_change(on_zone_change)
     client.on_state_change(on_state_change)
-
-    # Force update for current arming status and current zone states
-    hass.loop.create_task(client.keepalive())
-    hass.loop.create_task(client.update())
 
     async def handle_panic(call: ServiceCall) -> None:
         await client.panic(call.data[ATTR_CODE])

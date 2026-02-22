@@ -1,4 +1,5 @@
 """Support for interacting with Digital Ocean droplets."""
+
 from __future__ import annotations
 
 import logging
@@ -6,13 +7,16 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components.switch import PLATFORM_SCHEMA, SwitchEntity
+from homeassistant.components.switch import (
+    PLATFORM_SCHEMA as SWITCH_PLATFORM_SCHEMA,
+    SwitchEntity,
+)
 from homeassistant.core import HomeAssistant
-import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import (
+from .const import (
     ATTR_CREATED_AT,
     ATTR_DROPLET_ID,
     ATTR_DROPLET_NAME,
@@ -31,7 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_NAME = "Droplet"
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = SWITCH_PLATFORM_SCHEMA.extend(
     {vol.Required(CONF_DROPLETS): vol.All(cv.ensure_list, [cv.string])}
 )
 
@@ -63,7 +67,7 @@ class DigitalOceanSwitch(SwitchEntity):
 
     _attr_attribution = ATTRIBUTION
 
-    def __init__(self, do, droplet_id):  # pylint: disable=invalid-name
+    def __init__(self, do, droplet_id):
         """Initialize a new Digital Ocean sensor."""
         self._digital_ocean = do
         self._droplet_id = droplet_id
@@ -76,12 +80,12 @@ class DigitalOceanSwitch(SwitchEntity):
         return self.data.name
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool:
         """Return true if switch is on."""
         return self.data.status == "active"
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes of the Digital Ocean droplet."""
         return {
             ATTR_CREATED_AT: self.data.created_at,

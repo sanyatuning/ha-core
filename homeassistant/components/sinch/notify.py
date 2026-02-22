@@ -1,7 +1,9 @@
 """Support for Sinch notifications."""
+
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from clx.xms.api import MtBatchTextSmsResult
 from clx.xms.client import Client
@@ -17,12 +19,12 @@ from homeassistant.components.notify import (
     ATTR_DATA,
     ATTR_MESSAGE,
     ATTR_TARGET,
-    PLATFORM_SCHEMA,
+    PLATFORM_SCHEMA as NOTIFY_PLATFORM_SCHEMA,
     BaseNotificationService,
 )
 from homeassistant.const import CONF_API_KEY, CONF_SENDER
 from homeassistant.core import HomeAssistant
-import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 DOMAIN = "sinch"
@@ -36,7 +38,7 @@ DEFAULT_SENDER = "Home Assistant"
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = NOTIFY_PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_API_KEY): cv.string,
         vol.Required(CONF_SERVICE_PLAN_ID): cv.string,
@@ -66,7 +68,7 @@ class SinchNotificationService(BaseNotificationService):
         self.sender = config[CONF_SENDER]
         self.client = Client(config[CONF_SERVICE_PLAN_ID], config[CONF_API_KEY])
 
-    def send_message(self, message="", **kwargs):
+    def send_message(self, message: str = "", **kwargs: Any) -> None:
         """Send a message to a user."""
         targets = kwargs.get(ATTR_TARGET, self.default_recipients)
         data = kwargs.get(ATTR_DATA) or {}

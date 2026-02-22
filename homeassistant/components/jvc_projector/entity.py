@@ -6,7 +6,7 @@ import logging
 
 from jvcprojector import JvcProjector
 
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER, NAME
@@ -26,7 +26,7 @@ class JvcProjectorEntity(CoordinatorEntity[JvcProjectorDataUpdateCoordinator]):
 
         self._attr_unique_id = coordinator.unique_id
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.unique_id)},
+            identifiers={(DOMAIN, self._attr_unique_id)},
             name=NAME,
             model=self.device.model,
             manufacturer=MANUFACTURER,

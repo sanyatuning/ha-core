@@ -1,22 +1,23 @@
 """Implement the Ingress Panel feature for Hass.io Add-ons."""
-import asyncio
+
 from http import HTTPStatus
 import logging
+from typing import Any
 
 from aiohttp import web
 
-from homeassistant.components import frontend, panel_custom
+from homeassistant.components import frontend
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import ATTR_ICON
 from homeassistant.core import HomeAssistant
 
 from .const import ATTR_ADMIN, ATTR_ENABLE, ATTR_PANELS, ATTR_TITLE
-from .handler import HassioAPIError
+from .handler import HassIO, HassioAPIError
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_addon_panel(hass: HomeAssistant, hassio):
+async def async_setup_addon_panel(hass: HomeAssistant, hassio: HassIO) -> None:
     """Add-on Ingress Panel setup."""
     hassio_addon_panel = HassIOAddonPanel(hass, hassio)
     hass.http.register_view(hassio_addon_panel)
@@ -26,18 +27,13 @@ async def async_setup_addon_panel(hass: HomeAssistant, hassio):
         return
 
     # Register available panels
-    jobs = []
     for addon, data in panels.items():
         if not data[ATTR_ENABLE]:
             continue
-        jobs.append(
-            asyncio.create_task(
-                _register_panel(hass, addon, data), name=f"register panel {addon}"
-            )
-        )
-
-    if jobs:
-        await asyncio.wait(jobs)
+        # _register_panel never suspends and is only
+        # a coroutine because it would be a breaking change
+        # to make it a normal function
+        _register_panel(hass, addon, data)
 
 
 class HassIOAddonPanel(HomeAssistantView):
@@ -46,12 +42,12 @@ class HassIOAddonPanel(HomeAssistantView):
     name = "api:hassio_push:panel"
     url = "/api/hassio_push/panel/{addon}"
 
-    def __init__(self, hass, hassio):
+    def __init__(self, hass: HomeAssistant, hassio: HassIO) -> None:
         """Initialize WebView."""
         self.hass = hass
         self.hassio = hassio
 
-    async def post(self, request, addon):
+    async def post(self, request: web.Request, addon: str) -> web.Response:
         """Handle new add-on panel requests."""
         panels = await self.get_panels()
 
@@ -62,15 +58,15 @@ class HassIOAddonPanel(HomeAssistantView):
         data = panels[addon]
 
         # Register panel
-        await _register_panel(self.hass, addon, data)
+        _register_panel(self.hass, addon, data)
         return web.Response()
 
-    async def delete(self, request, addon):
+    async def delete(self, request: web.Request, addon: str) -> web.Response:
         """Handle remove add-on panel requests."""
         frontend.async_remove_panel(self.hass, addon)
         return web.Response()
 
-    async def get_panels(self):
+    async def get_panels(self) -> dict:
         """Return panels add-on info data."""
         try:
             data = await self.hassio.get_ingress_panels()
@@ -80,16 +76,14 @@ class HassIOAddonPanel(HomeAssistantView):
         return {}
 
 
-async def _register_panel(hass, addon, data):
+def _register_panel(hass: HomeAssistant, addon: str, data: dict[str, Any]):
     """Init coroutine to register the panel."""
-    await panel_custom.async_register_panel(
+    frontend.async_register_built_in_panel(
         hass,
+        "app",
         frontend_url_path=addon,
-        webcomponent_name="hassio-main",
         sidebar_title=data[ATTR_TITLE],
         sidebar_icon=data[ATTR_ICON],
-        js_url="/api/hassio/app/entrypoint.js",
-        embed_iframe=True,
         require_admin=data[ATTR_ADMIN],
-        config={"ingress": addon},
+        config={"addon": addon},
     )

@@ -1,4 +1,5 @@
 """Provides device triggers for binary sensors."""
+
 import voluptuous as vol
 
 from homeassistant.components.device_automation import (
@@ -112,8 +113,8 @@ ENTITY_TRIGGERS = {
         {CONF_TYPE: CONF_NO_LIGHT},
     ],
     BinarySensorDeviceClass.LOCK: [
-        {CONF_TYPE: CONF_LOCKED},
         {CONF_TYPE: CONF_NOT_LOCKED},
+        {CONF_TYPE: CONF_LOCKED},
     ],
     BinarySensorDeviceClass.MOISTURE: [
         {CONF_TYPE: CONF_MOIST},
@@ -195,7 +196,7 @@ TURNED_OFF = [trigger[1][CONF_TYPE] for trigger in ENTITY_TRIGGERS.values()]
 
 TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
     {
-        vol.Required(CONF_ENTITY_ID): cv.entity_id,
+        vol.Required(CONF_ENTITY_ID): cv.entity_id_or_uuid,
         vol.Required(CONF_TYPE): vol.In(TURNED_OFF + TURNED_ON),
         vol.Optional(CONF_FOR): cv.positive_time_period_dict,
     }
@@ -254,7 +255,7 @@ async def async_get_triggers(
                 **automation,
                 "platform": "device",
                 "device_id": device_id,
-                "entity_id": entry.entity_id,
+                "entity_id": entry.id,
                 "domain": DOMAIN,
             }
             for automation in templates

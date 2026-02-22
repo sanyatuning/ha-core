@@ -1,7 +1,9 @@
 """Kodi notification service."""
+
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import aiohttp
 import jsonrpc_async
@@ -11,7 +13,7 @@ from homeassistant.components.notify import (
     ATTR_DATA,
     ATTR_TITLE,
     ATTR_TITLE_DEFAULT,
-    PLATFORM_SCHEMA,
+    PLATFORM_SCHEMA as NOTIFY_PLATFORM_SCHEMA,
     BaseNotificationService,
 )
 from homeassistant.const import (
@@ -23,8 +25,8 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,7 +35,7 @@ DEFAULT_PORT = 8080
 DEFAULT_PROXY_SSL = False
 DEFAULT_TIMEOUT = 5
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = NOTIFY_PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
@@ -59,12 +61,12 @@ async def async_get_service(
     port: int = config[CONF_PORT]
     encryption = config.get(CONF_PROXY_SSL)
 
-    if host.startswith("http://") or host.startswith("https://"):
+    if host.startswith(("http://", "https://")):
         host = host[host.index("://") + 3 :]
         _LOGGER.warning(
             "Kodi host name should no longer contain http:// See updated "
             "definitions here: "
-            "https://www.home-assistant.io/integrations/media_player.kodi/"
+            "https://www.home-assistant.io/integrations/kodi/"
         )
 
     http_protocol = "https" if encryption else "http"
@@ -92,7 +94,7 @@ class KodiNotificationService(BaseNotificationService):
 
         self._server = jsonrpc_async.Server(self._url, **kwargs)
 
-    async def async_send_message(self, message="", **kwargs):
+    async def async_send_message(self, message: str = "", **kwargs: Any) -> None:
         """Send a message to Kodi."""
         try:
             data = kwargs.get(ATTR_DATA) or {}
